@@ -25,22 +25,15 @@ pub struct MultiSliceAlloc<'a, T> {
     _marker: PhantomData<&'a ()>,
 }
 
-pub trait IntoIterator {
+// Modeled after IntoIterator.
+pub trait IntoChannelPtrs {
     type Item;
-    type IntoIter: Iterator<Item = Self::Item>;
-
-    // Required method
-    fn into_iter(self) -> Self::IntoIter;
-}
-
-pub trait IntoMultiSlice {
-    type Item;
-    type IntoMulti: MultiSliceTrait<Item = Self::Item>;
+    type IntoMulti: ChannelPtrs<Item = Self::Item>;
 
     fn into_multi_slice(self) -> Self::IntoMulti;
 }
 
-pub trait MultiSliceTrait {
+pub trait ChannelPtrs {
     type Item;
 
     // TODO: ???
@@ -113,6 +106,14 @@ fn array_of_vec2array_of_ptr<T, const N: usize>(a: [Vec<T>; N]) -> [*const T; N]
     a.map(|v| v.as_ptr())
 }
 
+//pub fn process(signal: impl IntoChannelPtrs<Item = f32>) {}
+pub fn process<C: ChannelPtrs>(signal: impl Into<C>) {}
+//pub fn process(signal: impl Into<impl ChannelPtrs>) {}
+
+impl<T, const N: usize> ChannelPtrs for MultiSliceConst<T, N> {
+    type Item = T;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,6 +126,13 @@ mod tests {
         MultiSlice::from_ptrs(p, 3)
     }
     */
+
+    #[test]
+    fn from_array() {
+        let a = [&[1, 2, 3][..], &[4, 5, 6][..]];
+        process::<MultiSliceConst<_, _>>(a);
+        //process(a);
+    }
 
     #[test]
     fn basic() {
