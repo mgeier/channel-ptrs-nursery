@@ -90,6 +90,18 @@ impl<T, R: AsRef<[T]>> From<&[R]> for ChannelPtrs<'_, T, MAX_CHANNELS_FROM_SLICE
     }
 }
 
+/*
+impl<T> From<&[T]> for ChannelPtrs<'_, T, 1> {
+    fn from(slice: &[T]) -> Self {
+        Self {
+            frames: slice.len(),
+            channels: Storage::Array([slice.as_ptr()]),
+            _marker: PhantomData,
+        }
+    }
+}
+*/
+
 impl<T, R: AsRef<[T]>, const N: usize> From<[R; N]> for ChannelPtrs<'_, T, N> {
     fn from(channels: [R; N]) -> Self {
         let frames = channels
@@ -174,11 +186,20 @@ mod tests {
         */
         let s = &[&[1.0, 2.0, 3.0][..], &[4.0, 5.0, 6.0][..]][..];
         process(s);
+        // TODO: different lengths should cause an error!
         let ch0 = vec![1.0, 2.0, 3.0, 4.0];
         let ch1 = vec![4.0, 5.0, 6.0];
         let both = vec![ch0, ch1];
         process(both.as_ref());
     }
+
+    /*
+    #[test]
+    fn from_single_channel() {
+        let mono = vec![1.0, 2.0, 3.0, 4.0];
+        process(mono.as_ref());
+    }
+    */
 
     #[test]
     fn size() {
