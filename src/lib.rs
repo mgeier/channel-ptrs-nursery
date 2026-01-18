@@ -12,6 +12,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use core::marker::PhantomData;
+use core::ops::Deref;
 
 pub struct ChannelPtrs<'a, T, const N: usize = 2> {
     frames: usize,
@@ -30,6 +31,91 @@ enum Storage<T, const N: usize> {
     #[cfg(feature = "alloc")]
     Boxed(Box<[*const T]>),
 }
+
+pub trait IntoChannelPtrs {
+    type Item;
+    type IntoPtrs: ChannelPtrsTrait<Item = Self::Item>;
+
+    fn into_channel_ptrs(self) -> Self::IntoPtrs;
+}
+
+pub trait ChannelPtrsTrait {
+    type Item;
+}
+
+pub struct ChannelPtrsArray<T, const N: usize> {
+    frames: usize,
+    channels: [*const T; N],
+}
+
+impl<T, const N: usize> ChannelPtrsTrait for ChannelPtrsArray<T, N> {
+    type Item = T;
+}
+
+/*
+impl<T, R: Deref<Target = [T]>, const N: usize> IntoChannelPtrs for [R; N] {
+    type Item = T;
+    type IntoPtrs = ChannelPtrsArray<T, N>;
+
+    fn into_channel_ptrs(self) -> Self::IntoPtrs {
+        let frames = self
+            .iter()
+            .map(Deref::deref)
+            .map(<[T]>::len)
+            .reduce(|a, b| {
+                assert_eq!(a, b, "all channels must have equal length");
+                a
+            })
+            .unwrap_or(0);
+        Self::IntoPtrs {
+            frames,
+            channels: self.map(|c| c.as_ptr()),
+        }
+    }
+}
+*/
+
+impl<T, Inner: Deref<Target = [T]>, Outer: Deref<Target = Inner>> IntoChannelPtrs for Outer {
+    type Item = T;
+
+    type IntoPtrs = ChannelPtrsPartialArray<T, 5>;
+
+    fn into_channel_ptrs(self) -> Self::IntoPtrs {
+        todo!()
+    }
+}
+
+pub struct ChannelPtrsPartialArray<T, const N: usize> {
+    frames: usize,
+    channels: u16,
+    storage: [*const T; N],
+}
+
+impl<T, const N: usize> ChannelPtrsTrait for ChannelPtrsPartialArray<T, N> {
+    type Item = T;
+}
+
+impl<T, const N: usize> IntoChannelPtrs for [&[T]; N] {
+    type Item = T;
+    type IntoPtrs = ChannelPtrsArray<T, N>;
+
+    fn into_channel_ptrs(self) -> Self::IntoPtrs {
+        let frames = self
+            .iter()
+            .map(AsRef::as_ref)
+            .map(<[T]>::len)
+            .reduce(|a, b| {
+                assert_eq!(a, b, "all channels must have equal length");
+                a
+            })
+            .unwrap_or(0);
+        Self::IntoPtrs {
+            frames,
+            channels: self.map(|c| c.as_ptr()),
+        }
+    }
+}
+
 
 // TODO: panic or alloc on overflow?
 
@@ -74,8 +160,10 @@ impl<T, R: AsRef<[T]>> From<&[R]> for ChannelPtrs<'_, T, MAX_CHANNELS_FROM_SLICE
             .unwrap_or(0);
         let channels: u16 = slice.len().try_into().expect("slice too long");
         if usize::from(channels) > MAX_CHANNELS_FROM_SLICE {
-            panic!("Too many channels for automatic conversion: {channels} \
-                (maximum: {MAX_CHANNELS_FROM_SLICE})\nUse ChannelPtrs::TODO() instead.");
+            panic!(
+                "Too many channels for automatic conversion: {channels} \
+                (maximum: {MAX_CHANNELS_FROM_SLICE})\nUse ChannelPtrs::TODO() instead."
+            );
         }
         let mut ptrs = [core::ptr::dangling(); MAX_CHANNELS_FROM_SLICE];
         // NB: zip() stops when one of the iterators is exhausted.
@@ -155,6 +243,8 @@ fn array_of_vec2array_of_ptr<T, const N: usize>(a: [Vec<T>; N]) -> [*const T; N]
 
 pub fn process<'a, const N: usize>(signal: impl Into<ChannelPtrs<'a, f32, N>>) {}
 
+pub fn process2(signal: impl IntoChannelPtrs<Item = f32>) {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -176,6 +266,13 @@ mod tests {
         process(a);
 
         process([&vec![1.0, 2.0, 3.0], &vec![4.0, 5.0, 6.0]]);
+    }
+
+    #[test]
+    fn from_array3() {
+        let a = [&[1.0, 2.0, 3.0][..], &[4.0, 5.0, 6.0][..]];
+        process2(a);
+        process2([vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]]);
     }
 
     #[test]
