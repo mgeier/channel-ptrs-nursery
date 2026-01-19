@@ -1,6 +1,10 @@
 //! Pointers to channels.
+//!
+//! These are needed in some C APIs, do not use this in pure Rust code!
 
 #![no_std]
+
+#![forbid(clippy::undocumented_unsafe_blocks)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
@@ -10,7 +14,14 @@ use alloc::{boxed::Box, vec::Vec};
 
 use core::ops::Deref;
 
-pub trait ChannelPtrs {
+/// Pointers to audio channels.
+///
+/// # Safety
+///
+/// Implementations of this trait must ensure that the returned pointer points to
+/// `self.channels()` valid pointers which in turn point to `self.frames()` valid elements
+/// of type `Self::Item`.
+pub unsafe trait ChannelPtrs {
     type Item;
 
     fn frames(&self) -> usize;
@@ -37,12 +48,14 @@ impl<P: ChannelPtrs> IntoChannelPtrs for P {
     }
 }
 
+// Invariant: All pointers point to `frames` initialized elements of type `T`.
 pub struct ChannelPtrsArray<T, const N: usize> {
     frames: usize,
     channels: [*const T; N],
 }
 
-impl<T, const N: usize> ChannelPtrs for ChannelPtrsArray<T, N> {
+// SAFETY: All pointers point to `self.frames` `T`s each.
+unsafe impl<T, const N: usize> ChannelPtrs for ChannelPtrsArray<T, N> {
     type Item = T;
 
     fn frames(&self) -> usize {
@@ -96,13 +109,15 @@ impl<T, Inner: Deref<Target = [T]>> IntoChannelPtrs for &[Inner] {
     }
 }
 
+// Invariant: The first `channels` pointers point to `frames` initialized elements of type `T`.
 pub struct ChannelPtrsPartialArray<T, const N: usize> {
     frames: usize,
     channels: u16,
     storage: [*const T; N],
 }
 
-impl<T, const N: usize> ChannelPtrs for ChannelPtrsPartialArray<T, N> {
+// SAFETY: The first `self.channels` pointers point to `self.frames` `T`s each.
+unsafe impl<T, const N: usize> ChannelPtrs for ChannelPtrsPartialArray<T, N> {
     type Item = T;
 
     fn frames(&self) -> usize {
@@ -153,6 +168,7 @@ impl<T, Inner: Deref<Target = [T]>, const N: usize> IntoChannelPtrs for [Inner; 
 }
 
 // To avoid unintended allocations, this is never implicitly created.
+// Invariant: All pointers point to `frames` initialized elements of type `T`.
 #[cfg(feature = "alloc")]
 pub struct ChannelPtrsBoxed<T> {
     frames: usize,
@@ -160,7 +176,8 @@ pub struct ChannelPtrsBoxed<T> {
 }
 
 #[cfg(feature = "alloc")]
-impl<T> ChannelPtrs for ChannelPtrsBoxed<T> {
+// SAFETY: All pointers point to `self.frames` `T`s each.
+unsafe impl<T> ChannelPtrs for ChannelPtrsBoxed<T> {
     type Item = T;
 
     fn frames(&self) -> usize {
