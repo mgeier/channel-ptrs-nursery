@@ -3,7 +3,6 @@
 //! These are needed in some C APIs, do not use this in pure Rust code!
 
 #![no_std]
-
 #![forbid(clippy::undocumented_unsafe_blocks)]
 
 #[cfg(feature = "alloc")]
@@ -21,12 +20,19 @@ use core::ops::Deref;
 /// Implementations of this trait must ensure that the returned pointer points to
 /// `self.channels()` valid pointers which in turn point to `self.frames()` valid elements
 /// of type `Self::Item`.
+/// The returned pointer must be non-null, even if there are zero channels.
+/// If there are non-zero channels, all channel pointers must be non-null,
+/// even if there are zero frames.
 pub unsafe trait ChannelPtrs {
     type Item;
 
     fn frames(&self) -> usize;
     fn channels(&self) -> u16;
-    fn ptr_ptr(&self) -> *const *const Self::Item;
+    fn as_ptr(&self) -> *const *const Self::Item;
+    fn as_slice(&self) -> &[*const Self::Item] {
+        // SAFETY: See docstring.
+        unsafe { core::slice::from_raw_parts(self.as_ptr(), self.channels().into()) }
+    }
 }
 
 // The provided impls for [_; _], &[_] and Vec<_> never allocate memory,
@@ -66,7 +72,7 @@ unsafe impl<T, const N: usize> ChannelPtrs for ChannelPtrsArray<T, N> {
         N.try_into().unwrap()
     }
 
-    fn ptr_ptr(&self) -> *const *const Self::Item {
+    fn as_ptr(&self) -> *const *const Self::Item {
         self.channels.as_ptr()
     }
 }
@@ -90,7 +96,7 @@ impl<T, Inner: Deref<Target = [T]>> IntoChannelPtrs for &[Inner] {
             })
             .unwrap_or(0);
         let channels: u16 = self.len().try_into().expect("slice too long");
-        if usize::from(channels) > MAX_CHANNELS_FROM_SLICE {
+        if MAX_CHANNELS_FROM_SLICE < channels.into() {
             panic!(
                 "Too many channels for automatic conversion: {channels} \
                 (maximum: {MAX_CHANNELS_FROM_SLICE})\nUse ChannelPtrsBoxed instead."
@@ -128,8 +134,8 @@ unsafe impl<T, const N: usize> ChannelPtrs for ChannelPtrsPartialArray<T, N> {
         self.channels
     }
 
-    fn ptr_ptr(&self) -> *const *const Self::Item {
-        self.storage[..usize::from(self.channels)].as_ptr()
+    fn as_ptr(&self) -> *const *const Self::Item {
+        self.storage[..self.channels.into()].as_ptr()
     }
 }
 
@@ -188,7 +194,7 @@ unsafe impl<T> ChannelPtrs for ChannelPtrsBoxed<T> {
         self.channels.len().try_into().unwrap()
     }
 
-    fn ptr_ptr(&self) -> *const *const Self::Item {
+    fn as_ptr(&self) -> *const *const Self::Item {
         self.channels.as_ptr()
     }
 }
@@ -228,7 +234,7 @@ mod tests {
 
     pub fn process(signal: impl IntoChannelPtrs<Item = f32>) {
         let ptrs = signal.into_channel_ptrs();
-        let _ptr_ptr = ptrs.ptr_ptr();
+        let _ptr = ptrs.as_ptr();
         // This "pointer to pointers" would typically be passed to some C API.
         let _frames = ptrs.frames();
         let _channels = ptrs.channels();
