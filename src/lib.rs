@@ -37,15 +37,21 @@ pub unsafe trait ChannelPtrs {
 
 // The provided impls for [_; _], &[_] and Vec<_> never allocate memory,
 // ChannelPtrsBoxed uses a dynamic allocation.
-pub trait IntoChannelPtrs {
+/// Conversion into [`ChannelPtrs`].
+///
+/// # Safety
+///
+/// The conversion must establish the safety guarantees of [`ChannelPtrs`].
+pub unsafe trait IntoChannelPtrs {
     type Item;
     type IntoPtrs: ChannelPtrs<Item = Self::Item>;
 
     fn into_channel_ptrs(self) -> Self::IntoPtrs;
 }
 
-// Blanket implementation.
-impl<P: ChannelPtrs> IntoChannelPtrs for P {
+/// Blanket implementation for types that already implement the [`ChannelPtrs`] trait.
+// SAFETY: All types that implement the ChannelPtrs trait fulfill the safety requirements.
+unsafe impl<P: ChannelPtrs> IntoChannelPtrs for P {
     type Item = <P as ChannelPtrs>::Item;
     type IntoPtrs = P;
 
@@ -80,7 +86,8 @@ unsafe impl<T, const N: usize> ChannelPtrs for ChannelPtrsArray<T, N> {
 // This can be chosen arbitrarily as trade-off between stack usage and convenience.
 const MAX_CHANNELS_FROM_SLICE: usize = 16;
 
-impl<T, Inner: Deref<Target = [T]>> IntoChannelPtrs for &[Inner] {
+// SAFETY: The implementation establishes the requirements of ChannelPtrs.
+unsafe impl<T, Inner: Deref<Target = [T]>> IntoChannelPtrs for &[Inner] {
     type Item = T;
 
     type IntoPtrs = ChannelPtrsPartialArray<T, MAX_CHANNELS_FROM_SLICE>;
@@ -141,8 +148,9 @@ unsafe impl<T, const N: usize> ChannelPtrs for ChannelPtrsPartialArray<T, N> {
 
 // NB: we cannot implement the more generic `Outer: Deref<Target = [Inner]>`
 // because of conflicting implementations for `[Inner; N]`.
+// SAFETY: The implementation establishes the requirements of ChannelPtrs.
 #[cfg(feature = "alloc")]
-impl<T, Inner: Deref<Target = [T]>> IntoChannelPtrs for Vec<Inner> {
+unsafe impl<T, Inner: Deref<Target = [T]>> IntoChannelPtrs for Vec<Inner> {
     type Item = T;
 
     type IntoPtrs = ChannelPtrsPartialArray<T, MAX_CHANNELS_FROM_SLICE>;
@@ -152,7 +160,10 @@ impl<T, Inner: Deref<Target = [T]>> IntoChannelPtrs for Vec<Inner> {
     }
 }
 
-impl<T, Inner: Deref<Target = [T]>, const N: usize> IntoChannelPtrs for [Inner; N] {
+// TODO: impl for boxed slice Box<Inner>
+
+// SAFETY: The implementation establishes the requirements of ChannelPtrs.
+unsafe impl<T, Inner: Deref<Target = [T]>, const N: usize> IntoChannelPtrs for [Inner; N] {
     type Item = T;
     type IntoPtrs = ChannelPtrsArray<T, N>;
 
