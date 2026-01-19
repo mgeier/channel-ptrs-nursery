@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "multi-slice-nursery"
+name = "channel-ptrs-nursery"
 version = "0.1.0"
