@@ -1,7 +1,6 @@
 //! Pointers to channels.
 
 #![no_std]
-#![allow(unused)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
@@ -13,6 +12,10 @@ use core::ops::Deref;
 
 pub trait ChannelPtrs {
     type Item;
+
+    fn frames(&self) -> usize;
+    fn channels(&self) -> u16;
+    fn ptr_ptr(&self) -> *const *const Self::Item;
 }
 
 // The provided impls for [_; _], &[_] and Vec<_> never allocate memory,
@@ -41,6 +44,18 @@ pub struct ChannelPtrsArray<T, const N: usize> {
 
 impl<T, const N: usize> ChannelPtrs for ChannelPtrsArray<T, N> {
     type Item = T;
+
+    fn frames(&self) -> usize {
+        self.frames
+    }
+
+    fn channels(&self) -> u16 {
+        N.try_into().unwrap()
+    }
+
+    fn ptr_ptr(&self) -> *const *const Self::Item {
+        self.channels.as_ptr()
+    }
 }
 
 // This can be chosen arbitrarily as trade-off between stack usage and convenience.
@@ -89,6 +104,18 @@ pub struct ChannelPtrsPartialArray<T, const N: usize> {
 
 impl<T, const N: usize> ChannelPtrs for ChannelPtrsPartialArray<T, N> {
     type Item = T;
+
+    fn frames(&self) -> usize {
+        self.frames
+    }
+
+    fn channels(&self) -> u16 {
+        self.channels
+    }
+
+    fn ptr_ptr(&self) -> *const *const Self::Item {
+        self.storage[..usize::from(self.channels)].as_ptr()
+    }
 }
 
 // NB: we cannot implement the more generic `Outer: Deref<Target = [Inner]>`
@@ -135,11 +162,23 @@ pub struct ChannelPtrsBoxed<T> {
 #[cfg(feature = "alloc")]
 impl<T> ChannelPtrs for ChannelPtrsBoxed<T> {
     type Item = T;
+
+    fn frames(&self) -> usize {
+        self.frames
+    }
+
+    fn channels(&self) -> u16 {
+        self.channels.len().try_into().unwrap()
+    }
+
+    fn ptr_ptr(&self) -> *const *const Self::Item {
+        self.channels.as_ptr()
+    }
 }
 
 #[cfg(feature = "alloc")]
 impl<T> ChannelPtrsBoxed<T> {
-    fn from_slice<Inner: Deref<Target = [T]>>(slice: &[Inner]) -> Self {
+    pub fn from_slice<Inner: Deref<Target = [T]>>(slice: &[Inner]) -> Self {
         let frames = slice
             .iter()
             .map(Deref::deref)
@@ -149,16 +188,18 @@ impl<T> ChannelPtrsBoxed<T> {
                 a
             })
             .unwrap_or(0);
-        let v: Vec<_> = slice.iter().map(|s| s.as_ref().as_ptr()).collect();
+        let v: Vec<_> = slice.iter().map(|s| s.as_ptr()).collect();
         Self {
             frames,
             channels: v.into_boxed_slice(),
         }
     }
-}
 
-pub fn process(signal: impl IntoChannelPtrs<Item = f32>) {
-    let _ptrs = signal.into_channel_ptrs();
+    // TODO: new(), with_capacity() -> switch from Box to Vec?
+
+    // TODO: re-assign slice (with different length?)
+
+    // TODO: try to re-assign slice with different lifetime (see https://github.com/mgeier/rsor)
 }
 
 #[cfg(test)]
@@ -167,6 +208,14 @@ mod tests {
 
     #[cfg(feature = "alloc")]
     use alloc::vec;
+
+    pub fn process(signal: impl IntoChannelPtrs<Item = f32>) {
+        let ptrs = signal.into_channel_ptrs();
+        let _ptr_ptr = ptrs.ptr_ptr();
+        // This "pointer to pointers" would typically be passed to some C API.
+        let _frames = ptrs.frames();
+        let _channels = ptrs.channels();
+    }
 
     #[test]
     fn from_array() {
@@ -221,6 +270,5 @@ mod tests {
         ];
         let ptrs = ChannelPtrsBoxed::from_slice(s);
         process(ptrs);
-        // TODO: try to re-assign slice with different lifetime (see rsor?)
     }
 }
