@@ -252,7 +252,6 @@ where
         .by_ref()
         .zip(storage.iter_mut())
         .map(|(mut ch, ptr)| {
-            //channels += 1;
             let ch = ch.as_mut();
             let current_frames = ch.len();
             if let Some(f) = frames {
@@ -312,6 +311,9 @@ unsafe extern "C" fn do_nothing(_: *mut *mut f32, _: usize, _: u16) {}
 impl Processor {
     // NB: This takes a mutable reference because it is *not* reentrant.
     // TODO: explain lifetimes ('b could be longer than 'a)
+    // Using two lifetimes here allows for maximum flexibility.
+    // In most situations, one lifetime would work just as well
+    // (and the lifetime notation could be elided)
     pub fn process<'a, 'b, Channel, Channels>(
         &'a mut self,
         signal: Channels,
