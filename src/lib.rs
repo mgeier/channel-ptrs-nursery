@@ -11,7 +11,7 @@ extern crate alloc;
 #[cfg(feature = "alloc")]
 use alloc::{boxed::Box, vec::Vec};
 
-use core::ops::Deref;
+use core::{mem::MaybeUninit, ops::Deref};
 
 /// Pointers to audio channels.
 ///
@@ -269,19 +269,42 @@ where
     (storage.as_mut_ptr(), frames.unwrap_or(0), channels)
 }
 
+/// Slices from pointers ...
+///
+/// # Safety
+///
+/// TODO: many things
 pub unsafe fn channel_ptrs_to_slices_mut<'a, 'b, T>(
     ptrs: *mut *mut T,
     frames: usize,
     channels: u16,
+    storage: &'a mut [MaybeUninit<&mut [T]>],
 ) -> &'a mut [&'b mut [T]] {
-    todo!()
+    let channels = channels.into();
+    assert!(channels <= storage.len(), "not enough space in `storage`");
+    for (i, channel_slice) in storage.iter_mut().enumerate().take(channels) {
+        // SAFETY: Caller must ensure requirements stated in docstring.
+        let s = unsafe { core::slice::from_raw_parts_mut(*ptrs.add(i), frames) };
+        *channel_slice = MaybeUninit::new(s);
+    }
+    // SAFETY: The correct number of slices has been initialized above.
+    unsafe { core::slice::from_raw_parts_mut(storage.as_mut_ptr() as *mut &mut [_], channels) }
 }
 
 // TODO: move to tests (or examples?)
 
-#[derive(Default)]
 pub struct Processor {
     channel_ptrs: [*mut f32; 6],
+    channel_refs: [MaybeUninit<&'static mut [f32]>; 6],
+}
+
+impl Processor {
+    pub fn new() -> Self {
+        Self {
+            channel_ptrs: [core::ptr::null_mut(); _],
+            channel_refs: [const { MaybeUninit::uninit() }; _],
+        }
+    }
 }
 
 unsafe extern "C" fn do_nothing(_: *mut *mut f32, _: usize, _: u16) {}
@@ -289,7 +312,10 @@ unsafe extern "C" fn do_nothing(_: *mut *mut f32, _: usize, _: u16) {}
 impl Processor {
     // NB: This takes a mutable reference because it is *not* reentrant.
     // TODO: explain lifetimes ('b could be longer than 'a)
-    pub fn process<'a, 'b, Channel, Channels>(&'a mut self, signal: Channels) -> &'a mut [&'b mut [f32]]
+    pub fn process<'a, 'b, Channel, Channels>(
+        &'a mut self,
+        signal: Channels,
+    ) -> &'a mut [&'b mut [f32]]
     where
         Channel: AsMut<[f32]> + 'b,
         Channels: IntoIterator<Item = Channel>,
@@ -304,7 +330,7 @@ impl Processor {
         }
 
         // SAFETY: Results from `channel_ptrs_from_slices_mut()` are valid for the given lifetimes.
-        unsafe { channel_ptrs_to_slices_mut(ptrs, frames, channels) }
+        unsafe { channel_ptrs_to_slices_mut(ptrs, frames, channels, &mut self.channel_refs) }
     }
 }
 
@@ -418,11 +444,16 @@ mod tests {
     #[test]
     fn process_slice() {
         let signal: &mut [&mut [_]] = &mut [&mut [1.0, 2.0, 3.0], &mut [4.0, 5.0, 6.0]];
+        let channel0;
         {
-            let mut p = Processor::default();
+            let mut p = Processor::new();
             let result = p.process(signal);
             assert_eq!(result, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]);
+            channel0 = core::mem::take(&mut result[0]);
         }
+        // The lifetime 'a of the outer slice (stored in the Processor) has already ended,
+        // but the inner slice with lifetime 'b is still alive.
+        assert_eq!(channel0, [1.0, 2.0, 3.0]);
     }
 
     #[test]
