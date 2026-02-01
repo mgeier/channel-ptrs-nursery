@@ -8,3 +8,6 @@ default = ["alloc"]
 alloc = []
 
 [dependencies]
+
+[dev-dependencies]
+ndarray = "0.17.2"
