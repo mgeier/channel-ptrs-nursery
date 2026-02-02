@@ -290,6 +290,8 @@ pub unsafe fn channel_ptrs_to_slices_mut<'a, 'b, T>(
     unsafe { core::slice::from_raw_parts_mut(storage.as_mut_ptr() as *mut &mut [_], channels) }
 }
 
+// TODO: channel_ptrs_to_iterator (without extra storage?)
+
 // TODO: move to tests (or examples?)
 
 pub struct Processor {
