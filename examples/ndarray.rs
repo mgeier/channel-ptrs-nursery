@@ -1,4 +1,4 @@
-use ndarray::{ArrayRef2, Axis, array};
+use ndarray::{Array, ArrayRef2, Axis, ShapeBuilder, array};
 
 const COLUMN_AXIS: Axis = Axis(0);
 const ROW_AXIS: Axis = Axis(1);
@@ -95,46 +95,53 @@ fn process_columns_inplace(a: &mut ArrayRef2<f32>) {
     // TODO: explain behavior when one-channel signal is given, interleaved or not?
 }
 
+fn column_data((r, c): (usize, usize)) -> f32 {
+    r as f32 * if c % 2 == 0 { 0.1 } else { -0.1 }
+}
+
 fn main() {
-    let mut a = array![[0.1f32, -0.1], [0.2, -0.2], [0.3, -0.3]];
-    assert!(a.is_standard_layout());
+    // Channels as columns, C memory order.
+    let mut columns_c = Array::from_shape_fn((3, 2), column_data);
+    assert_eq!(columns_c, array![[0.0, -0.0], [0.1, -0.1], [0.2, -0.2]]);
+    assert!(columns_c.is_standard_layout());
 
-    assert!(contiguous_columns(&a).is_none());
-    assert!(contiguous_columns_mut(&mut a).is_none());
+    assert!(contiguous_columns(&columns_c).is_none());
+    assert!(contiguous_columns_mut(&mut columns_c).is_none());
 
+    // Iterate over frames.
     {
-        let mut iter = contiguous_rows_mut(&mut a).unwrap();
+        let mut iter = contiguous_rows_mut(&mut columns_c).unwrap();
         let row0 = iter.next().unwrap();
-        assert_eq!(row0, [0.1, -0.1]);
+        assert_eq!(row0, [0.0, -0.0]);
         let row1 = iter.next().unwrap();
         row1[0] = 99.9;
         let row2 = iter.next().unwrap();
-        assert_eq!(row2, [0.3, -0.3]);
+        assert_eq!(row2, [0.2, -0.2]);
     }
 
     {
-        let mut iter = contiguous_rows(&a).unwrap();
+        let mut iter = contiguous_rows(&columns_c).unwrap();
         let row0 = iter.next().unwrap();
-        assert_eq!(row0, [0.1, -0.1]);
+        assert_eq!(row0, [0.0, -0.0]);
         let row1 = iter.next().unwrap();
-        assert_eq!(row1, [99.9, -0.2]);
+        assert_eq!(row1, [99.9, -0.1]);
         let row2 = iter.next().unwrap();
-        assert_eq!(row2, [0.3, -0.3]);
+        assert_eq!(row2, [0.2, -0.2]);
     }
 
-    assert!(interleaved_rows(&a).is_none());
-    assert!(interleaved_rows_mut(&mut a).is_none());
+    assert!(interleaved_rows(&columns_c).is_none());
+    assert!(interleaved_rows_mut(&mut columns_c).is_none());
 
-    let data = interleaved_columns_mut(&mut a).unwrap();
+    let data = interleaved_columns_mut(&mut columns_c).unwrap();
     data[3] = -99.9;
 
-    let data = interleaved_columns(&a).unwrap();
-    assert_eq!(data, [0.1, -0.1, 99.9, -99.9, 0.3, -0.3]);
+    let data = interleaved_columns(&columns_c).unwrap();
+    assert_eq!(data, [0.0, -0.0, 99.9, -99.9, 0.2, -0.2]);
 
-    let b = a.t();
-    assert!(!b.is_standard_layout());
+    let rows_f = columns_c.t();
+    assert!(!rows_f.is_standard_layout());
 
-    assert!(contiguous_rows(&b).is_none());
+    assert!(contiguous_rows(&rows_f).is_none());
 
     let mut column_vector = array![[0.1f32], [0.2], [0.3]];
 
@@ -158,4 +165,9 @@ fn main() {
 
     let s = interleaved_columns_mut(&mut row_vector).unwrap();
     s[2] = -0.3;
+
+    // Channels as columns, F memory order.
+    let columns_f = Array::from_shape_fn((3, 2).f(), column_data);
+    assert_eq!(columns_f, array![[0.0, -0.0], [0.1, -0.1], [0.2, -0.2]]);
+    assert!(!columns_f.is_standard_layout());
 }
