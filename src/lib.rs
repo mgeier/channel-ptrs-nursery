@@ -8,8 +8,6 @@
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
-use core::mem::MaybeUninit;
-
 // TODO: move this to example code:
 /*
 // This can be chosen arbitrarily as trade-off between stack usage and convenience.
@@ -57,67 +55,85 @@ pub unsafe fn channel_ptrs_to_slices_mut<'a, 'b, T>(
     ptrs: *mut *mut T,
     frames: usize,
     channels: u16,
-    storage: &'a mut [MaybeUninit<&'b mut [T]>],
+    storage: &'a mut [*mut [T]],
 ) -> &'a mut [&'b mut [T]] {
     let channels = channels.into();
     assert!(channels <= storage.len(), "not enough space in `storage`");
     for (i, channel_slice) in storage.iter_mut().enumerate().take(channels) {
         // SAFETY: Caller must ensure requirements stated in docstring.
         let s = unsafe { core::slice::from_raw_parts_mut(*ptrs.add(i), frames) };
-        *channel_slice = MaybeUninit::new(s);
+        *channel_slice = s;
     }
     // SAFETY: The correct number of slices has been initialized above.
     unsafe { core::slice::from_raw_parts_mut(storage.as_mut_ptr() as *mut &mut [_], channels) }
 }
 
-// TODO: channel_ptrs_to_iterator (without extra storage?)
+/// Something something.
+///
+/// # Safety
+///
+/// TODO: many things
+// without extra storage!
+pub unsafe fn channel_ptrs_to_iter_mut<'a, T: 'a>(
+    ptrs: *mut *mut T,
+    frames: usize,
+    channels: u16,
+) -> impl Iterator<Item = &'a mut [T]> {
+    (0..usize::from(channels)).map(move |i| {
+        // SAFETY: Caller must ensure requirements stated in docstring.
+        unsafe { core::slice::from_raw_parts_mut(*ptrs.add(i), frames) }
+    })
+}
 
 // TODO: move to tests (or examples?)
 
 pub struct Processor {
     channel_ptrs: [*mut f32; 6],
-    channel_refs: [MaybeUninit<&'static mut [f32]>; 6],
+    //channel_refs: [MaybeUninit<&'static mut [f32]>; 6],
+    //channel_refs: [*mut [f32]; 6],
 }
 
 impl Processor {
     pub fn new() -> Self {
         Self {
             channel_ptrs: [core::ptr::null_mut(); _],
-            channel_refs: [const { MaybeUninit::uninit() }; _],
+            //channel_refs: [const { MaybeUninit::uninit() }; _],
+            // https://github.com/rust-lang/rust/issues/66316
+            //channel_refs: [core::ptr::null_mut::<[f32; 0]>() as *mut [f32]; _],
         }
     }
 }
 
-unsafe extern "C" fn do_nothing(_: *mut *mut f32, _: usize, _: u16) {}
+impl Default for Processor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// This is a stand-in for some FFI function.
+unsafe extern "C" fn set_a_value(ptrs: *mut *mut f32, frames: usize, channels: u16) {
+    assert!(0 < frames && 0 < channels);
+    // SAFETY: there is at least one frame and one channel.
+    unsafe { **ptrs = 99.9 };
+}
 
 impl Processor {
-    // NB: This takes a mutable reference because it is *not* reentrant.
-    // TODO: explain lifetimes ('b could be longer than 'a)
-    // Using two lifetimes here allows for maximum flexibility.
-    // In most situations, one lifetime would work just as well
-    // (and the lifetime notation could be elided)
-    pub fn process<'a, 'b, Channel, Channels>(
-        &'a mut self,
-        signal: Channels,
-    ) -> &'a mut [&'b mut [f32]]
+    // NB: This takes a mutable reference to `self` because it is *not* reentrant.
+    pub fn process<Channel, Channels>(&mut self, signal: Channels)
     where
-        Channel: AsMut<[f32]> + 'b,
+        Channel: AsMut<[f32]>,
         Channels: IntoIterator<Item = Channel>,
     {
         let (ptrs, frames, channels) = channel_ptrs_from_slices_mut(signal, &mut self.channel_ptrs);
 
-        // Let's pretend that we are passing `ptrs` to some FFI function here,
-        // where the channel data will be overwritten.
-        // SAFETY: Doing nothing is safe.
+        // SAFETY: channel_ptrs_from_slices_mut() returned valid results.
         unsafe {
-            do_nothing(ptrs, frames, channels);
+            set_a_value(ptrs, frames, channels);
         }
-
-        // SAFETY: Results from `channel_ptrs_from_slices_mut()` are valid for the given lifetimes.
-        unsafe { channel_ptrs_to_slices_mut(ptrs, frames, channels, &mut self.channel_refs) }
     }
 }
 
+// TODO: turn into example (or remove?)
 pub fn process_iter<Channel, Channels>(signal: Channels) -> usize
 where
     Channel: AsMut<[f32]>,
@@ -219,88 +235,49 @@ mod tests {
 
     #[test]
     fn process_slice() {
-        let signal: &mut [&mut [_]] = &mut [&mut [1.0, 2.0, 3.0], &mut [4.0, 5.0, 6.0]];
-        let channel0;
+        let ch0 = [1.0, 2.0, 3.0];
+        let ch1 = [4.0, 5.0, 6.0];
         {
+            let signal: &mut [_] = &mut [ch0, ch1];
             let mut p = Processor::new();
-            let result = p.process(signal);
-            assert_eq!(result, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]);
-            channel0 = core::mem::take(&mut result[0]);
+            p.process(signal);
         }
-        // The lifetime 'a of the outer slice (stored in the Processor) has already ended,
-        // but the inner slice with lifetime 'b is still alive.
-        assert_eq!(channel0, [1.0, 2.0, 3.0]);
+        // The lifetime of the outer slice (passed to the Processor) has already ended,
+        // but the inner slices are still alive.
+        assert_eq!(ch0, [1.0, 2.0, 3.0]);
     }
 
     #[test]
     fn from_array() {
-        let signal: [&mut [_]; _] = [&mut [1.0, 2.0, 3.0], &mut [4.0, 5.0, 6.0]];
+        let ch0 = [1.0, 2.0, 3.0];
+        let ch1 = [4.0, 5.0, 6.0];
         let mut p = Processor::new();
-        let result = p.process(signal);
-        assert_eq!(result, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]);
+        p.process([ch0, ch1]);
+        assert_eq!(ch0, [1.0, 2.0, 3.0]);
+        // TODO: reset signal
         #[cfg(feature = "alloc")]
         {
-            let result = p.process([vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]]);
-            assert_eq!(result, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]);
-        }
-    }
-
-    #[test]
-    fn from_slice() {
-        let signal: &mut [&mut [_]] = &mut [&mut [1.0, 2.0, 3.0], &mut [4.0, 5.0, 6.0]];
-        let mut p = Processor::new();
-        let result = p.process(signal);
-        assert_eq!(result, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]);
-
-        #[cfg(feature = "alloc")]
-        {
-            let result = p.process(vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]]);
-            assert_eq!(result, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]);
+            let mut ch0 = vec![1.0, 2.0, 3.0];
+            let mut ch1 = vec![4.0, 5.0, 6.0];
+            p.process([&mut ch0, &mut ch1]);
+            assert_eq!(ch0, [99.9, 2.0, 3.0]);
         }
     }
 
     // Mono signals can be put into a one-element array.
     #[test]
     fn from_single_channel() {
-        let mono: &mut [_] = &mut [1.0, 2.0, 3.0, 4.0];
+        let mono = [1.0, 2.0, 3.0, 4.0];
         let mut p = Processor::new();
-        let result = p.process([mono]);
-        assert_eq!(result, [[1.0, 2.0, 3.0, 4.0]]);
+        // TODO: array is `Copy` so this copies the whole signal and modifies the copy!
+        p.process([mono]);
+        assert_eq!(mono, [1.0, 2.0, 3.0, 4.0]);
+        let mut mono = mono;
+        p.process([&mut mono]);
+        assert_eq!(mono, [99.9, 2.0, 3.0, 4.0]);
         #[cfg(feature = "alloc")]
-        let mono = vec![1.0, 2.0, 3.0, 4.0];
-        let result = p.process([mono]);
-        assert_eq!(result, [[1.0, 2.0, 3.0, 4.0]]);
+        let mut mono = vec![1.0, 2.0, 3.0, 4.0];
+        p.process([&mut mono]);
+        assert_eq!(mono, [99.9, 2.0, 3.0, 4.0]);
     }
-
-    /*
-    #[cfg(feature = "alloc")]
-    #[test]
-    fn boxed() {
-        let s: &[&[_]] = &[
-            &[1.0, 2.0, 3.0],
-            &[1.0, 2.0, 3.0],
-            &[1.0, 2.0, 3.0],
-            &[1.0, 2.0, 3.0],
-            &[1.0, 2.0, 3.0],
-            &[1.0, 2.0, 3.0],
-            &[1.0, 2.0, 3.0],
-            &[1.0, 2.0, 3.0],
-            &[1.0, 2.0, 3.0],
-            &[1.0, 2.0, 3.0],
-            &[1.0, 2.0, 3.0],
-            &[1.0, 2.0, 3.0],
-            &[1.0, 2.0, 3.0],
-            &[1.0, 2.0, 3.0],
-            &[1.0, 2.0, 3.0],
-            &[1.0, 2.0, 3.0],
-            &[1.0, 2.0, 3.0],
-            &[1.0, 2.0, 3.0],
-            &[1.0, 2.0, 3.0],
-            &[1.0, 2.0, 3.0],
-        ];
-        let mut storage = [core::ptr::null_mut(); 6];
-        let (ptrs, frames, channels) = channel_ptrs_from_slices(s, &mut storage);
-        unsafe { do_nothing(ptrs, frames, channels) };
-    }
-    */
 }

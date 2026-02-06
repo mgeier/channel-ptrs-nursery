@@ -83,10 +83,10 @@ pub fn interleaved_rows_mut<T>(a: &mut ArrayRef2<T>) -> Option<&mut [T]> {
     a.as_slice_memory_order_mut()
 }
 
-fn process_columns_inplace(a: &mut ArrayRef2<f32>) {
-    if let Some(iter) = contiguous_columns_mut(a) {
+fn _process_columns_inplace(a: &mut ArrayRef2<f32>) {
+    if let Some(_iter) = contiguous_columns_mut(a) {
         todo!()
-    } else if let Some(slice) = interleaved_columns_mut(a) {
+    } else if let Some(_slice) = interleaved_columns_mut(a) {
         todo!()
     } else {
         // TODO: error (read-only array would be copied to appropriate layout)
