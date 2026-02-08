@@ -4,9 +4,8 @@ How to Handle Multi-Channel Audio Signals in Rust
 There is still *much* to do!
 
 > Don't define containers, define interfaces.
->
-> -- Irish proverb
 
+—Irish proverb
 
 Nomenclature
 ------------
