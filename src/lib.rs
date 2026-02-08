@@ -24,6 +24,87 @@ pub mod tutorial;
 const MAX_CHANNELS_FROM_SLICE: usize = 16;
 */
 
+/// A non-mutable audio channel in contiguous memory.
+///
+/// This can be used to define generic function arguments
+/// (using `impl IntoIterator<Item: Channel<T>>`) that accept multi-channel signals.
+///
+/// # Examples
+///
+/// ```
+/// use channel_ptrs_nursery::Channel;
+///
+/// fn process(channels: impl IntoIterator<Item: Channel<f32>>) {
+///     // Use in for-loop or call .into_iter():
+///     for channel in channels {
+///         // Call .as_ref() on each channel to get a "normal" slice:
+///         let channel: &[f32] = channel.as_ref();
+///         assert_eq!(channel[0], 0.5);
+///     }
+/// }
+///
+/// // This function can be used in many different ways:
+///
+/// let a = [[0.5, 0.6, 0.7, 0.8], [0.5, 0.4, 0.3, 0.2]];
+/// process(&a);
+///
+/// let v = vec![vec![0.5, 0.6, 0.7, 0.8], vec![0.5, 0.4, 0.3, 0.2]];
+/// process(&v);
+///
+/// let left = [0.5, 0.6, 0.7, 0.8];
+/// let right = [0.5, 0.4, 0.3, 0.2];
+/// process([&left, &right]);
+///
+/// let noninterleaved = [0.5, 0.6, 0.7, 0.8, 0.5, 0.4, 0.3, 0.2];
+/// process(noninterleaved.chunks(4));
+/// ```
+pub trait Channel<T>: AsRef<[T]> {}
+
+impl<T, U: AsRef<[T]> + ?Sized> Channel<T> for &U {}
+
+/// A mutable audio channel in contiguous memory.
+///
+/// This can be used to define generic function arguments
+/// (using `impl IntoIterator<Item: ChannelMut<T>>`) that accept multi-channel signals.
+///
+/// # Examples
+///
+/// ```
+/// use channel_ptrs_nursery::ChannelMut;
+///
+/// fn process(channels: impl IntoIterator<Item: ChannelMut<f32>>) {
+///     // Use in for-loop or call .into_iter():
+///     for mut channel in channels {
+///         // Call .as_mut() on each channel to get a "normal" writable slice:
+///         let channel: &mut [f32] = channel.as_mut();
+///         channel[0] = 0.99;
+///     }
+/// }
+///
+/// // This function can be used in many different ways:
+///
+/// let mut a = [[0.5, 0.6, 0.7, 0.8], [0.5, 0.4, 0.3, 0.2]];
+/// process(&mut a);
+/// assert_eq!(a, [[0.99, 0.6, 0.7, 0.8], [0.99, 0.4, 0.3, 0.2]]);
+///
+/// let mut v = vec![vec![0.5, 0.6, 0.7, 0.8], vec![0.5, 0.4, 0.3, 0.2]];
+/// process(&mut v);
+/// assert_eq!(v, [[0.99, 0.6, 0.7, 0.8], [0.99, 0.4, 0.3, 0.2]]);
+///
+/// let mut left = [0.5, 0.6, 0.7, 0.8];
+/// let mut right = [0.5, 0.4, 0.3, 0.2];
+/// process([&mut left, &mut right]);
+/// assert_eq!(left, [0.99, 0.6, 0.7, 0.8]);
+/// assert_eq!(right, [0.99, 0.4, 0.3, 0.2]);
+///
+/// let mut noninterleaved = [0.5, 0.6, 0.7, 0.8, 0.5, 0.4, 0.3, 0.2];
+/// process(noninterleaved.chunks_mut(4));
+/// assert_eq!(noninterleaved, [0.99, 0.6, 0.7, 0.8, 0.99, 0.4, 0.3, 0.2]);
+/// ```
+pub trait ChannelMut<T>: AsMut<[T]> {}
+
+impl<T, U: AsMut<[T]> + ?Sized> ChannelMut<T> for &mut U {}
+
 /// Creates channel pointers from a sequence of non-mutable slices.
 ///
 /// If you have a single slice with non-interleaved channels,
@@ -34,13 +115,10 @@ const MAX_CHANNELS_FROM_SLICE: usize = 16;
 /// # Panics
 ///
 /// If the requested number of channels doesn't fit into `u16`.
-pub fn channel_ptrs_from_slices<T, Channels>(
-    signal: Channels,
+pub fn channel_ptrs_from_slices<T>(
+    signal: impl IntoIterator<Item: Channel<T>>,
     storage: &mut [*const T],
-) -> Result<(*const *const T, usize, u16), Error>
-where
-    Channels: IntoIterator<Item: AsRef<[T]>>,
-{
+) -> Result<(*const *const T, usize, u16), Error> {
     let mut signal = signal.into_iter();
     let mut frames = None;
     let channels = signal
@@ -77,13 +155,10 @@ where
 /// # Panics
 ///
 /// If the requested number of channels doesn't fit into `u16`.
-pub fn channel_ptrs_from_slices_mut<T, Channels>(
-    signal: Channels,
+pub fn channel_ptrs_from_slices_mut<T>(
+    signal: impl IntoIterator<Item: ChannelMut<T>>,
     storage: &mut [*mut T],
-) -> Result<(*mut *mut T, usize, u16), Error>
-where
-    Channels: IntoIterator<Item: AsMut<[T]>>,
-{
+) -> Result<(*mut *mut T, usize, u16), Error> {
     let mut signal = signal.into_iter();
     let mut frames = None;
     let channels = signal
@@ -248,11 +323,7 @@ unsafe extern "C" fn set_a_value(ptrs: *mut *mut f32, frames: usize, channels: u
 
 impl Processor {
     // NB: This takes a mutable reference to `self` because it is *not* reentrant.
-    pub fn process<'c, Channel, Channels>(&mut self, signal: Channels)
-    where
-        Channels: IntoIterator<Item = &'c mut Channel>,
-        Channel: AsMut<[f32]> + ?Sized + 'c,
-    {
+    pub fn process(&mut self, signal: impl IntoIterator<Item: ChannelMut<f32>>) {
         let (ptrs, frames, channels) =
             channel_ptrs_from_slices_mut(signal, &mut self.channel_ptrs).unwrap();
 
@@ -271,13 +342,12 @@ impl Processor {
 
 // TODO: noninterleaved_to_* via chunks()/chunks_mut()?
 
-pub fn copy_to_interleaved<T, Channels>(
-    source: Channels,
+pub fn copy_to_interleaved<T>(
+    source: impl IntoIterator<IntoIter: ExactSizeIterator, Item: Channel<T>>,
     destination: &mut [T],
 ) -> Result<(), Error>
 where
     T: Copy,
-    Channels: IntoIterator<IntoIter: ExactSizeIterator, Item: AsRef<[T]>>,
 {
     let source = source.into_iter();
     let mut frames = None;
@@ -331,7 +401,7 @@ mod tests {
 
     #[test]
     fn test_copy_to_interleaved() {
-        let source: [&mut [_]; _] = [&mut [1.0, 2.0, 3.0], &mut [4.0, 5.0, 6.0]];
+        let source: [&[_]; _] = [&[1.0, 2.0, 3.0], &[4.0, 5.0, 6.0]];
         let mut destination = [0.0; 6];
         copy_to_interleaved(source, &mut destination).unwrap();
         assert_eq!(destination, [1.0, 4.0, 2.0, 5.0, 3.0, 6.0]);
@@ -354,6 +424,11 @@ mod tests {
 
         let mut ch0 = [1.0, 2.0, 3.0];
         let mut ch1 = [4.0, 5.0, 6.0];
+
+        // Incorrect usage:
+        p.process(&mut [ch0, ch1]);
+        assert_eq!(ch0, [1.0, 2.0, 3.0]);
+
         p.process([&mut ch0, &mut ch1]);
         assert_eq!(ch0, [99.9, 2.0, 3.0]);
 
@@ -379,9 +454,8 @@ mod tests {
         assert_eq!(signal, [[99.9, 2.0, 3.0], [4.0, 5.0, 6.0]]);
     }
 
-    // stacked == non-interleaved
     #[test]
-    fn process_stacked() {
+    fn process_noninterleaved() {
         let mut data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
         let mut p = Processor::new();
         p.process(data.chunks_mut(3));
