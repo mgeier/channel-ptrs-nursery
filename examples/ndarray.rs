@@ -1,6 +1,6 @@
 #![cfg(feature = "ndarray")]
 
-use channel_ptrs_nursery::ndarray::{
+use much::ndarray::{
     contiguous_columns_mut, interleaved_columns_mut,
 };
 use ndarray::ArrayRef2;

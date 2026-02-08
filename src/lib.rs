@@ -32,7 +32,7 @@ const MAX_CHANNELS_FROM_SLICE: usize = 16;
 /// # Examples
 ///
 /// ```
-/// use channel_ptrs_nursery::Channel;
+/// use much::Channel;
 ///
 /// fn process(channels: impl IntoIterator<Item: Channel<f32>>) {
 ///     // Use in for-loop or call .into_iter():
@@ -70,7 +70,7 @@ impl<T, U: AsRef<[T]> + ?Sized> Channel<T> for &U {}
 /// # Examples
 ///
 /// ```
-/// use channel_ptrs_nursery::ChannelMut;
+/// use much::ChannelMut;
 ///
 /// fn process(channels: impl IntoIterator<Item: ChannelMut<f32>>) {
 ///     // Use in for-loop or call .into_iter():
