@@ -248,9 +248,10 @@ unsafe extern "C" fn set_a_value(ptrs: *mut *mut f32, frames: usize, channels: u
 
 impl Processor {
     // NB: This takes a mutable reference to `self` because it is *not* reentrant.
-    pub fn process<Channels>(&mut self, signal: Channels)
+    pub fn process<'c, Channel, Channels>(&mut self, signal: Channels)
     where
-        Channels: IntoIterator<Item: AsMut<[f32]>>,
+        Channels: IntoIterator<Item = &'c mut Channel>,
+        Channel: AsMut<[f32]> + ?Sized + 'c,
     {
         let (ptrs, frames, channels) =
             channel_ptrs_from_slices_mut(signal, &mut self.channel_ptrs).unwrap();
@@ -349,26 +350,14 @@ mod tests {
 
     #[test]
     fn process_array() {
-        let ch0 = [1.0, 2.0, 3.0];
-        let ch1 = [4.0, 5.0, 6.0];
         let mut p = Processor::new();
-        // TODO: array is `Copy` so this copies each channel and modifies the copy!
-        p.process([ch0, ch1]);
-        assert_eq!(ch0, [1.0, 2.0, 3.0]);
 
         let mut ch0 = [1.0, 2.0, 3.0];
         let mut ch1 = [4.0, 5.0, 6.0];
         p.process([&mut ch0, &mut ch1]);
         assert_eq!(ch0, [99.9, 2.0, 3.0]);
 
-        let signal = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]];
-        // TODO: array is `Copy` so this copies the whole signal and modifies the copy!
-        p.process(signal);
-        assert_eq!(signal, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]);
-
         let mut signal = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]];
-        // https://users.rust-lang.org/t/false-positive-for-clippy-needless-borrows-for-generic-args/138147
-        #[allow(clippy::needless_borrows_for_generic_args)]
         p.process(&mut signal);
         assert_eq!(signal, [[99.9, 2.0, 3.0], [4.0, 5.0, 6.0]]);
 
@@ -402,12 +391,8 @@ mod tests {
     // Mono signals can be put into a one-element array.
     #[test]
     fn process_single_channel() {
-        let mono = [1.0, 2.0, 3.0, 4.0];
+        let mut mono = [1.0, 2.0, 3.0, 4.0];
         let mut p = Processor::new();
-        // TODO: array is `Copy` so this copies the whole signal and modifies the copy!
-        p.process([mono]);
-        assert_eq!(mono, [1.0, 2.0, 3.0, 4.0]);
-        let mut mono = mono;
         p.process([&mut mono]);
         assert_eq!(mono, [99.9, 2.0, 3.0, 4.0]);
         #[cfg(feature = "alloc")]
