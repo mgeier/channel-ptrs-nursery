@@ -1,7 +1,11 @@
-Audio Channel Something Something
-=================================
+How to Handle Multi-Channel Audio Signals in Rust
+=================================================
 
-Don't define containers, define interfaces.
+There is still *much* to do!
+
+> Don't define containers, define interfaces.
+>
+> -- Irish proverb
 
 
 Nomenclature
