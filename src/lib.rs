@@ -235,8 +235,10 @@ impl Default for Processor {
 // This is a stand-in for some FFI function.
 unsafe extern "C" fn set_a_value(ptrs: *mut *mut f32, frames: usize, channels: u16) {
     assert!(0 < frames && 0 < channels);
-    // SAFETY: there is at least one frame and one channel.
-    unsafe { (*ptrs).write(99.9); }
+    // SAFETY: The pointer is valid and there is at least one frame and one channel.
+    unsafe {
+        (*ptrs).write(99.9);
+    }
 }
 
 impl Processor {
@@ -333,13 +335,10 @@ mod tests {
     fn process_slice() {
         let ch0 = [1.0, 2.0, 3.0];
         let ch1 = [4.0, 5.0, 6.0];
-        {
-            let signal: &mut [_] = &mut [ch0, ch1];
-            let mut p = Processor::new();
-            p.process(signal);
-        }
-        // The lifetime of the outer slice (passed to the Processor) has already ended,
-        // but the inner slices are still alive.
+        // TODO: array is `Copy` so this copies each channel and modifies the copy!
+        let signal: &mut [_] = &mut [ch0, ch1];
+        let mut p = Processor::new();
+        p.process(signal);
         assert_eq!(ch0, [1.0, 2.0, 3.0]);
     }
 
@@ -348,9 +347,26 @@ mod tests {
         let ch0 = [1.0, 2.0, 3.0];
         let ch1 = [4.0, 5.0, 6.0];
         let mut p = Processor::new();
+        // TODO: array is `Copy` so this copies each channel and modifies the copy!
         p.process([ch0, ch1]);
         assert_eq!(ch0, [1.0, 2.0, 3.0]);
-        // TODO: reset signal
+
+        let mut ch0 = [1.0, 2.0, 3.0];
+        let mut ch1 = [4.0, 5.0, 6.0];
+        p.process([&mut ch0, &mut ch1]);
+        assert_eq!(ch0, [99.9, 2.0, 3.0]);
+
+        let signal = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]];
+        // TODO: array is `Copy` so this copies the whole signal and modifies the copy!
+        p.process(signal);
+        assert_eq!(signal, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]);
+
+        let mut signal = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]];
+        // https://users.rust-lang.org/t/false-positive-for-clippy-needless-borrows-for-generic-args/138147
+        #[allow(clippy::needless_borrows_for_generic_args)]
+        p.process(&mut signal);
+        assert_eq!(signal, [[99.9, 2.0, 3.0], [4.0, 5.0, 6.0]]);
+
         #[cfg(feature = "alloc")]
         {
             let mut ch0 = vec![1.0, 2.0, 3.0];
@@ -358,6 +374,15 @@ mod tests {
             p.process([&mut ch0, &mut ch1]);
             assert_eq!(ch0, [99.9, 2.0, 3.0]);
         }
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn process_vec() {
+        let mut signal = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
+        let mut p = Processor::new();
+        p.process(&mut signal);
+        assert_eq!(signal, [[99.9, 2.0, 3.0], [4.0, 5.0, 6.0]]);
     }
 
     // stacked == non-interleaved
