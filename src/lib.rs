@@ -1,4 +1,4 @@
-//! Pointers to channels.
+//! Pointers to channels (and more?).
 //!
 //! These are needed in some C APIs, do not use this in pure Rust code!
 
@@ -105,6 +105,8 @@ where
     Ok((storage.as_mut_ptr(), frames.unwrap_or(0), channels))
 }
 
+// TODO: channel pointers from uninit slices?
+
 /// Creates a non-mutable slice of slices from channel pointers.
 ///
 /// In most cases, [`channel_ptrs_to_slices()`] is easier to use and should be preferred.
@@ -114,6 +116,8 @@ where
 /// # Safety
 ///
 /// TODO: many things
+///
+/// TODO: memory must be initialized. add uninit variant?
 pub unsafe fn channel_ptrs_to_nested_slices<'b, T>(
     ptrs: *const *const T,
     frames: usize,
@@ -232,7 +236,7 @@ impl Default for Processor {
 unsafe extern "C" fn set_a_value(ptrs: *mut *mut f32, frames: usize, channels: u16) {
     assert!(0 < frames && 0 < channels);
     // SAFETY: there is at least one frame and one channel.
-    unsafe { **ptrs = 99.9 };
+    unsafe { (*ptrs).write(99.9); }
 }
 
 impl Processor {
