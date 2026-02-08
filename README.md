@@ -53,3 +53,33 @@ Comments might be outdated (see version numbers).
 * [dasp](https://docs.rs/dasp/0.11.0/dasp/),
   formerly known as [sample](https://docs.rs/sample/0.11.0/sample/)
   * no block-wise processing, only frame-wise?
+
+
+Existing APIs
+-------------
+
+It might be interesting to look at existing APIs to see which terms they use,
+which data types etc.
+
+* [CPAL](https://docs.rs/cpal/0.17.1/cpal/)
+  * traits: `Sample`, ...
+  * input/output streams with callbacks taking `&[T]` and `&mut [T]`
+    * interleaved data (see also [#367](https://github.com/RustAudio/cpal/issues/367))
+    * no duplex support yet (see [#349](https://github.com/RustAudio/cpal/issues/349)
+      and [#1096](https://github.com/RustAudio/cpal/pull/1096))
+  * types:
+    ```
+    pub type ChannelCount = u16;
+    pub type FrameCount = u32;
+    pub type SampleRate = u32;
+    pub enum BufferSize {
+        Default,
+        Fixed(FrameCount),
+    }
+    ```
+  * parameter names:
+    ```
+    channels: ChannelCount
+    sample_rate: SampleRate
+    buffer_size: BufferSize
+    ```

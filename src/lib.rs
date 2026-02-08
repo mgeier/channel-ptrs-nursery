@@ -8,6 +8,11 @@
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
+/*
+#[cfg(doc)]
+pub mod tutorial;
+*/
+
 // TODO: move this to example code:
 /*
 // This can be chosen arbitrarily as trade-off between stack usage and convenience.
