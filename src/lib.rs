@@ -8,10 +8,15 @@
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
+#[cfg(feature = "ndarray")]
+pub mod ndarray;
+
 /*
 #[cfg(doc)]
 pub mod tutorial;
 */
+
+// TODO: iter to slice? mention in ndarray module docs
 
 // TODO: move this to example code:
 /*

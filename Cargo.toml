@@ -6,8 +6,7 @@ edition = "2024"
 [features]
 default = ["alloc"]
 alloc = []
+ndarray = ["dep:ndarray"]
 
 [dependencies]
-
-[dev-dependencies]
-ndarray = "0.17.2"
+ndarray = { version = "0.17", optional = true }
