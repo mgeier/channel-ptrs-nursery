@@ -5,6 +5,8 @@
 #![no_std]
 #![forbid(clippy::undocumented_unsafe_blocks)]
 
+use core::mem::MaybeUninit;
+
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
@@ -340,14 +342,11 @@ impl Processor {
     }
 }
 
-// TODO: copy_to_interleaved_uninit()
-
-// TODO: copy_from_interleaved()? ..._uninit()?
-
 // TODO: copy_to_noninterleaved()? use memcpy?
 
 // TODO: noninterleaved_to_* via chunks()/chunks_mut()?
 
+// TODO: test with frames = 0
 pub fn copy_to_interleaved<T>(
     source: impl IntoIterator<IntoIter: ExactSizeIterator, Item: Channel<T>>,
     destination: &mut [T],
@@ -355,13 +354,27 @@ pub fn copy_to_interleaved<T>(
 where
     T: Copy,
 {
+    // SAFETY: Transmuting &mut [T] to &mut [MaybeUninit<T>] is generally unsafe!
+    // However, T implements Copy and only valid T values will ever be written,
+    // and the reference never leaves our control, it should be fine.
+    let destination = unsafe { &mut *(destination as *mut [_] as *mut _) };
+    copy_to_interleaved_uninit(source, destination).map(|_| {})
+}
+
+pub fn copy_to_interleaved_uninit<T>(
+    source: impl IntoIterator<IntoIter: ExactSizeIterator, Item: Channel<T>>,
+    destination: &mut [MaybeUninit<T>],
+) -> Result<&mut [T], Error>
+where
+    T: Copy,
+{
     let source = source.into_iter();
-    let mut frames = None;
     // TODO: move this comment to the docstring?
     // NB: len() is provided by ExactSizeIterator.
     // We could probably implement this without it, but it's simpler
     // and we can show off how to get the number of channels from an iterator.
     let channels = source.len();
+    let mut frames = None;
     for (offset, ch) in source.enumerate() {
         let ch = ch.as_ref();
         let current_frames = ch.len();
@@ -381,10 +394,80 @@ where
             .step_by(channels)
             .zip(ch)
         {
-            *dst = *src;
+            *dst = MaybeUninit::new(*src);
         }
     }
     // TODO: return frames & channels?
+    // SAFETY: All slice elements have been initialized.
+    Ok(unsafe {
+        core::slice::from_raw_parts_mut(destination.as_mut_ptr().cast(), destination.len())
+    })
+}
+
+// refer to copy_to_interleaved for ExactSizeIterator etc.
+pub fn copy_from_interleaved<T>(
+    source: &mut [T],
+    destination: impl IntoIterator<IntoIter: ExactSizeIterator, Item: ChannelMut<T>>,
+) -> Result<(), Error>
+where
+    T: Copy,
+{
+    let destination = destination.into_iter();
+    let channels = destination.len();
+    let mut frames = None;
+    for (offset, mut ch) in destination.enumerate() {
+        let ch = ch.as_mut();
+        let current_frames = ch.len();
+        if let Some(f) = frames {
+            if current_frames != f {
+                return Err(Error::Jagged);
+            }
+        } else {
+            if current_frames * channels != source.len() {
+                return Err(Error::LengthMismatch);
+            }
+            frames = Some(current_frames);
+        }
+        for (dst, src) in ch
+            .iter_mut()
+            .zip(source.iter_mut().skip(offset).step_by(channels))
+        {
+            *dst = *src;
+        }
+    }
+    Ok(())
+}
+
+pub fn copy_from_interleaved_uninit<T>(
+    source: &mut [T],
+    destination: impl IntoIterator<IntoIter: ExactSizeIterator, Item: ChannelMut<MaybeUninit<T>>>,
+) -> Result<(), Error>
+where
+    T: Copy,
+{
+    let destination = destination.into_iter();
+    let channels = destination.len();
+    let mut frames = None;
+    for (offset, mut ch) in destination.enumerate() {
+        let ch = ch.as_mut();
+        let current_frames = ch.len();
+        if let Some(f) = frames {
+            if current_frames != f {
+                return Err(Error::Jagged);
+            }
+        } else {
+            if current_frames * channels != source.len() {
+                return Err(Error::LengthMismatch);
+            }
+            frames = Some(current_frames);
+        }
+        for (dst, src) in ch
+            .iter_mut()
+            .zip(source.iter_mut().skip(offset).step_by(channels))
+        {
+            *dst = MaybeUninit::new(*src);
+        }
+    }
     Ok(())
 }
 
