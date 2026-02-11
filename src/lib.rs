@@ -43,6 +43,8 @@ const MAX_CHANNELS_FROM_SLICE: usize = 16;
 ///     }
 /// }
 ///
+/// // TODO: mention ExactSizeIterator?
+///
 /// // This function can be used in many different ways:
 ///
 /// let a = [[0.5, 0.6, 0.7, 0.8], [0.5, 0.4, 0.3, 0.2]];
@@ -321,6 +323,10 @@ unsafe extern "C" fn set_a_value(ptrs: *mut *mut f32, frames: usize, channels: u
     }
 }
 
+// TODO: do we need those? docs: users can create their own traits (+ blanket impls)
+pub trait ChannelsMut<T>: IntoIterator<IntoIter: ExactSizeIterator, Item: ChannelMut<T>> {}
+impl<T, U: IntoIterator<IntoIter: ExactSizeIterator, Item: ChannelMut<T>>> ChannelsMut<T> for U {}
+
 impl Processor {
     // NB: This takes a mutable reference to `self` because it is *not* reentrant.
     pub fn process(&mut self, signal: impl IntoIterator<Item: ChannelMut<f32>>) {
@@ -351,9 +357,10 @@ where
 {
     let source = source.into_iter();
     let mut frames = None;
-    // TODO: get channels from dest_len / frames and avoid ExactSizeIterator?
-    // TODO: mention ExactSizeIterator in the docs nevertheless
-    // TODO: check if there are too many or too few channels
+    // TODO: move this comment to the docstring?
+    // NB: len() is provided by ExactSizeIterator.
+    // We could probably implement this without it, but it's simpler
+    // and we can show off how to get the number of channels from an iterator.
     let channels = source.len();
     for (offset, ch) in source.enumerate() {
         let ch = ch.as_ref();
@@ -377,6 +384,7 @@ where
             *dst = *src;
         }
     }
+    // TODO: return frames & channels?
     Ok(())
 }
 

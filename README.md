@@ -23,6 +23,7 @@ Open Questions
 
 * do we need SIMD support?
   * see e.g. [audio_buffer_interface](https://git.sr.ht/~signal_processor/audio_buffer/tree/master/item/src/lib.rs)
+  * [fundsp](https://crates.io/crates/fundsp) uses [wide](https://crates.io/crates/wide)
 
 
 Potential Alternatives
