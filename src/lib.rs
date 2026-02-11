@@ -412,14 +412,9 @@ pub fn copy_from_interleaved<T>(
 where
     T: Copy,
 {
-    copy_from_interleaved_uninit(source, destination.into_iter().map(|mut ch| {
-        let ch = ch.as_mut();
-        // SAFETY: TODO (same as above?)
-        unsafe { core::slice::from_raw_parts_mut(ch.as_mut_ptr().cast(), ch.len()) }
-    }))
+    copy_from_interleaved_and_return_iter(source, destination).try_for_each(|ch| ch.map(|_| ()))
 }
 
-// TODO: return iterator to initialized slices?
 pub fn copy_from_interleaved_uninit<T>(
     source: &mut [T],
     destination: impl IntoIterator<IntoIter: ExactSizeIterator, Item: ChannelMut<MaybeUninit<T>>>,
@@ -427,10 +422,38 @@ pub fn copy_from_interleaved_uninit<T>(
 where
     T: Copy,
 {
+    copy_from_interleaved_and_return_iter_uninit(source, destination)
+        .try_for_each(|ch| ch.map(|_| ()))
+}
+
+pub fn copy_from_interleaved_and_return_iter<T>(
+    source: &mut [T],
+    destination: impl IntoIterator<IntoIter: ExactSizeIterator, Item: ChannelMut<T>>,
+) -> impl ExactSizeIterator<Item = Result<&mut [T], Error>>
+where
+    T: Copy,
+{
+    copy_from_interleaved_and_return_iter_uninit(
+        source,
+        destination.into_iter().map(|mut ch| {
+            let ch = ch.as_mut();
+            // SAFETY: TODO: same as above?
+            unsafe { core::slice::from_raw_parts_mut(ch.as_mut_ptr().cast(), ch.len()) }
+        }),
+    )
+}
+
+pub fn copy_from_interleaved_and_return_iter_uninit<T>(
+    source: &mut [T],
+    destination: impl IntoIterator<IntoIter: ExactSizeIterator, Item: ChannelMut<MaybeUninit<T>>>,
+) -> impl ExactSizeIterator<Item = Result<&mut [T], Error>>
+where
+    T: Copy,
+{
     let destination = destination.into_iter();
     let channels = destination.len();
     let mut frames = None;
-    for (offset, mut ch) in destination.enumerate() {
+    destination.enumerate().map(move |(offset, mut ch)| {
         let ch = ch.as_mut();
         let current_frames = ch.len();
         if let Some(f) = frames {
@@ -449,8 +472,9 @@ where
         {
             *dst = MaybeUninit::new(*src);
         }
-    }
-    Ok(())
+        // SAFETY: TODO: see above?
+        Ok(unsafe { core::slice::from_raw_parts_mut(ch.as_mut_ptr().cast(), ch.len()) })
+    })
 }
 
 // TODO: multiple errors? rename?
