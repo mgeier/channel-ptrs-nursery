@@ -412,32 +412,14 @@ pub fn copy_from_interleaved<T>(
 where
     T: Copy,
 {
-    let destination = destination.into_iter();
-    let channels = destination.len();
-    let mut frames = None;
-    for (offset, mut ch) in destination.enumerate() {
+    copy_from_interleaved_uninit(source, destination.into_iter().map(|mut ch| {
         let ch = ch.as_mut();
-        let current_frames = ch.len();
-        if let Some(f) = frames {
-            if current_frames != f {
-                return Err(Error::Jagged);
-            }
-        } else {
-            if current_frames * channels != source.len() {
-                return Err(Error::LengthMismatch);
-            }
-            frames = Some(current_frames);
-        }
-        for (dst, src) in ch
-            .iter_mut()
-            .zip(source.iter_mut().skip(offset).step_by(channels))
-        {
-            *dst = *src;
-        }
-    }
-    Ok(())
+        // SAFETY: TODO (same as above?)
+        unsafe { core::slice::from_raw_parts_mut(ch.as_mut_ptr().cast(), ch.len()) }
+    }))
 }
 
+// TODO: return iterator to initialized slices?
 pub fn copy_from_interleaved_uninit<T>(
     source: &mut [T],
     destination: impl IntoIterator<IntoIter: ExactSizeIterator, Item: ChannelMut<MaybeUninit<T>>>,
