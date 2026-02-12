@@ -7,9 +7,6 @@
 
 use core::mem::MaybeUninit;
 
-#[cfg(feature = "alloc")]
-extern crate alloc;
-
 #[cfg(feature = "ndarray")]
 pub mod ndarray;
 
@@ -648,7 +645,7 @@ pub enum Error {
 mod tests {
     use super::*;
 
-    #[cfg(feature = "alloc")]
+    extern crate alloc;
     use alloc::vec;
 
     #[test]
@@ -688,7 +685,6 @@ mod tests {
         p.process(&mut signal);
         assert_eq!(signal, [[99.9, 2.0, 3.0], [4.0, 5.0, 6.0]]);
 
-        #[cfg(feature = "alloc")]
         {
             let mut ch0 = vec![1.0, 2.0, 3.0];
             let mut ch1 = vec![4.0, 5.0, 6.0];
@@ -697,7 +693,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "alloc")]
     #[test]
     fn process_vec() {
         let mut signal = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
@@ -721,7 +716,6 @@ mod tests {
         let mut p = Processor::new();
         p.process([&mut mono]);
         assert_eq!(mono, [99.9, 2.0, 3.0, 4.0]);
-        #[cfg(feature = "alloc")]
         let mut mono = vec![1.0, 2.0, 3.0, 4.0];
         p.process([&mut mono]);
         assert_eq!(mono, [99.9, 2.0, 3.0, 4.0]);
