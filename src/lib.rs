@@ -9,6 +9,8 @@
 //!
 //! slice of slice is an obvious choice ...
 //!
+//! TODO: nested slices need extra storage, see e.g. [`channel_ptrs_to_nested_slices()`]
+//!
 //! ```
 //! pub fn process(channels: &mut [&mut [f32]]) {
 //!     for channel in channels {
