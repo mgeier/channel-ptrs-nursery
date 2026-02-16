@@ -175,7 +175,7 @@
 #![no_std]
 #![forbid(clippy::undocumented_unsafe_blocks)]
 
-use core::mem::MaybeUninit;
+use core::{marker::PhantomData, mem::MaybeUninit};
 
 #[cfg(feature = "ndarray")]
 pub mod ndarray;
@@ -795,6 +795,56 @@ where
     })
 }
 
+/// Returns pseudo-iterator over writable frames (as iterators over samples).
+///
+/// TODO: not compatible with [`Iterator`],
+/// `LendingIterator` doesn't exist yet in the standard library
+///
+/// `channels` is *not* an [`IntoIterator`], because the channels are iterated multiple times
+/// (once for each frame), which would require [`Copy`], which is not available for mutable
+/// slices/containers.
+#[must_use]
+pub fn iterate_over_frames_mut<'a, T, C>(channels: &'a mut [C]) -> FramesMut<'a, T, C>
+where
+    C: AsMut<[T]>,
+{
+    FramesMut {
+        index: 0,
+        frames: None,
+        channels,
+        _phantom: PhantomData,
+    }
+}
+
+pub struct FramesMut<'a, T, C> {
+    index: usize,
+    frames: Option<usize>,
+    channels: &'a mut [C],
+    _phantom: PhantomData<&'a mut T>,
+}
+
+impl<T, C> FramesMut<'_, T, C>
+where
+    C: AsMut<[T]>,
+{
+    pub fn next_frame(&mut self) -> Option<impl Iterator<Item = &mut T>> {
+        if self.frames.is_none() {
+            self.frames = Some(self.channels.get_mut(0)?.as_mut().len());
+        }
+        if self.index < self.frames.unwrap() {
+            let index = self.index;
+            self.index += 1;
+            Some(
+                self.channels
+                    .iter_mut()
+                    .map(move |ch| ch.as_mut().get_mut(index).unwrap()),
+            )
+        } else {
+            None
+        }
+    }
+}
+
 // TODO: multiple errors? rename?
 #[derive(Debug)]
 pub enum Error {
@@ -813,6 +863,18 @@ mod tests {
 
     extern crate alloc;
     use alloc::vec;
+
+    #[test]
+    fn test_vec_frames_mut() {
+        let mut v = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
+        let mut frames = iterate_over_frames_mut(&mut v);
+        while let Some(frame) = frames.next_frame() {
+            for (i, s) in frame.enumerate() {
+                *s = *s * 100.0 + i as f32;
+            }
+        }
+        assert_eq!(v, [[100.0, 200.0, 300.0], [401.0, 501.0, 601.0]]);
+    }
 
     #[test]
     fn test_copy_to_interleaved() {
