@@ -4,7 +4,6 @@
 //!
 //! TODO: move this to separate module?
 //!
-//!
 //! ... contiguous channels are common ...
 //!
 //! slice of slice is an obvious choice ...
@@ -96,6 +95,7 @@
 //! ```
 //!
 //! ... another variant (can be turned into an iterator multiple times?) ...
+//! ... works only for mutable references!
 //!
 //! ```
 //! pub fn process<'c, C, I: 'c>(channels: &'c mut I)
@@ -905,6 +905,7 @@ where
 /// `channels` is *not* an [`IntoIterator`], because the channels are iterated multiple times
 /// (once for each frame), which would require [`Copy`], which is not available for mutable
 /// slices/containers.
+// TODO: this works because [`Iterator` is implemented for `&mut I` where `I: Iterator`](Iterator#impl-Iterator-for-%26mut+I)
 #[must_use]
 pub fn frames_from_channels_mut<'a, T, C>(channels: &'a mut [C]) -> FramesMut<'a, T, C>
 where
