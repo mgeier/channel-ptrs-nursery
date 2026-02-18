@@ -977,6 +977,17 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_noninterleaved_frames() {
+        let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let frames = frames_from_channels(a.chunks(3));
+        for frame in frames {
+            for (_i, _s) in frame.enumerate() {
+                // TODO: test something! collect?
+            }
+        }
+    }
+
     // NB: this is not a common use case, but it helps us make sure that no copies are made.
     #[test]
     fn test_vec_cell_frames() {
