@@ -821,6 +821,7 @@ where
 
 // TODO: move into "frames" submodule to avoid confusion on the main documentation page?
 
+/// Returns an iterator over frames (which themselves are iterators over samples).
 // TODO: docs: this does not copy any samples and instead yields `&T`
 // TODO: docs: depending on the circumstances, it might be more efficient to copy all samples to interleaved first and then use `chunks()` to iterate over frames
 // see [`copy_to_interleaved()`]
@@ -899,7 +900,7 @@ where
     }
 }
 
-/// Returns pseudo-iterator over writable frames (as iterators over samples).
+/// Returns a pseudo-iterator over writable frames (which themselves are iterators over samples).
 ///
 /// TODO: not compatible with [`Iterator`],
 /// `LendingIterator` doesn't exist yet in the standard library
@@ -907,7 +908,6 @@ where
 /// `channels` is *not* an [`IntoIterator`], because the channels are iterated multiple times
 /// (once for each frame), which would require [`Copy`], which is not available for mutable
 /// slices/containers.
-// TODO: this works because [`Iterator` is implemented for `&mut I` where `I: Iterator`](Iterator#impl-Iterator-for-%26mut+I)
 #[must_use]
 pub fn frames_from_channels_mut<'a, T, C>(channels: &'a mut [C]) -> FramesFromChannelsMut<'a, T, C>
 where
