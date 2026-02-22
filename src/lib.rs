@@ -819,6 +819,8 @@ where
     })
 }
 
+// TODO: move into "frames" submodule to avoid confusion on the main documentation page?
+
 // TODO: docs: this does not copy any samples and instead yields `&T`
 // TODO: docs: depending on the circumstances, it might be more efficient to copy all samples to interleaved first and then use `chunks()` to iterate over frames
 // see [`copy_to_interleaved()`]
@@ -907,11 +909,11 @@ where
 /// slices/containers.
 // TODO: this works because [`Iterator` is implemented for `&mut I` where `I: Iterator`](Iterator#impl-Iterator-for-%26mut+I)
 #[must_use]
-pub fn frames_from_channels_mut<'a, T, C>(channels: &'a mut [C]) -> FramesMut<'a, T, C>
+pub fn frames_from_channels_mut<'a, T, C>(channels: &'a mut [C]) -> FramesFromChannelsMut<'a, T, C>
 where
     C: AsMut<[T]>,
 {
-    FramesMut {
+    FramesFromChannelsMut {
         index: 0,
         frames: None,
         channels,
@@ -919,14 +921,14 @@ where
     }
 }
 
-pub struct FramesMut<'a, T, C> {
+pub struct FramesFromChannelsMut<'a, T, C> {
     index: usize,
     frames: Option<usize>,
     channels: &'a mut [C],
     _phantom: PhantomData<&'a mut T>,
 }
 
-impl<T, C> FramesMut<'_, T, C>
+impl<T, C> FramesFromChannelsMut<'_, T, C>
 where
     C: AsMut<[T]>,
 {
