@@ -94,31 +94,6 @@
 //! assert_eq!(noninterleaved, [0.5, 0.2, 0.3, -0.5, -0.2, -0.3]);
 //! ```
 //!
-//! ... another variant (can be turned into an iterator multiple times?) ...
-//! ... works only for mutable references!
-//!
-//! ```
-//! pub fn process<'c, C, I: 'c>(channels: &'c mut I)
-//! where
-//!     &'c mut I: IntoIterator<Item = &'c mut C>,
-//!     C: AsMut<[f32]> + ?Sized + 'c,
-//! {
-//!     for mut channel in channels {
-//!         let channel = channel.as_mut();
-//!         channel[0] *= 5.0;
-//!     }
-//! }
-//!
-//! let mut data = [[0.1, 0.2, 0.3], [-0.1, -0.2, -0.3]];
-//! process(&mut data);
-//! assert_eq!(data, [[0.5, 0.2, 0.3], [-0.5, -0.2, -0.3]]);
-//!
-//! // The `?Sized` part above is needed for this to work:
-//! let mut noninterleaved = [0.1, 0.2, 0.3, -0.1, -0.2, -0.3];
-//! process(&mut noninterleaved.chunks_mut(3));
-//! assert_eq!(noninterleaved, [0.5, 0.2, 0.3, -0.5, -0.2, -0.3]);
-//! ```
-//!
 //! ... this does what we want, but the function signature is getting quite cryptic ...
 //!
 //! ... let's try to make the function signature less cryptic by introducing
