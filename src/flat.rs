@@ -187,6 +187,9 @@ where
 /// If you want to copy into an uninitialized slice, you can use
 /// [`copy_to_interleaved_uninit()`].
 ///
+/// If you want to copy without interleaving, you can use
+/// [`copy_to_noninterleaved()`].
+///
 /// # Errors
 ///
 /// [`Error::Jagged`] if not all source channels have the same length.
@@ -253,6 +256,9 @@ where
 ///
 /// If you want to copy into an uninitialized slice, you can use
 /// [`copy_to_noninterleaved_uninit()`].
+///
+/// If you want to interleave the channels, you can use
+/// [`copy_to_interleaved()`].
 ///
 /// # Errors
 ///

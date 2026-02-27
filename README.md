@@ -1,9 +1,10 @@
-How to Handle Multi-Channel Audio Signals in Rust
-=================================================
+Handling Multi-Channel Audio Signals in Rust
+============================================
 
 There is still *much* to do!
 
-> Don't define containers, define interfaces.
+> Don't define containers,  
+> define interfaces.
 
 —Irish proverb
 
@@ -30,7 +31,7 @@ Potential Alternatives
 ----------------------
 
 In alphabetical order.
-Comments might be outdated (see version numbers).
+Comments might be outdated (see version numbers in links).
 
 * [audio](https://docs.rs/audio/0.2.1/audio/),
   formerly known as [rotary](https://docs.rs/rotary/0.28.1/rotary/)

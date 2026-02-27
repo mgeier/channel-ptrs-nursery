@@ -1,18 +1,38 @@
-//! TODO.
+//! Handling Multi-Channel Audio Signals.
 //!
-//! TODO: move this to separate module?
+//! ... this is about interfaces between components ...
+//! within the private implementation of a component, other approaches might be
+//! useful (e.g. operator overloading for block-wise calculations) ...
+//!
+//! ... block-based vs. sample/frame-based ...
 //!
 //! ... contiguous channels are common ...
 //!
+//! ... alternative: (non)interleaved channels in flat slices, see [`flat`] module
+//!
+//! ... when interfacing with Python, often two-dimensional NumPy arrays are used.
+//! those are basically interleaved or noninterleaved ...
+//! See [`ndarray`] module.
+//!
+//! ... when interfacing via FFI, often pointers to pointers are used,
+//! see [`pointers`] module
+//!
+//! TODO: move this to separate module?
+//!
 //! # Slice of slices
 //!
-//! slice of slice is an obvious choice ...
-//!
-//! TODO: nested slices need extra storage, see e.g. [`pointers::channel_ptrs_to_nested_slices()`]
+//! A block of a multi-channel audio signal can be seen as a sequence of channels.
+//! It often makes sense to store one channel of such a block
+//! in contiguous memory, which can be easily passed around by means of a
+//! (mutable or immutable) [`slice`].
+//! The whole multi-channel block can then be represented by a
+//! slice of slices:
 //!
 //! ```
-//! pub fn process(channels: &mut [&mut [f32]]) {
+//! fn process(channels: &mut [&mut [f32]]) {
+//!     // Instead of iterating, we could also use indexing.
 //!     for channel in channels {
+//!         // Instead of indexing, we could also use iteration.
 //!         channel[0] *= 5.0;
 //!     }
 //! }
@@ -24,9 +44,21 @@
 //! assert_eq!(right, [-0.5, -0.2, -0.3]);
 //! ```
 //!
-//! array/Vec does not work ...
+//! Of course we don't have to use `f32`, we can use any other available sample type
+//! or a generic type, if desired.
+//!
+//! In this example we are passing a mutable slice of slices (`&mut [&mut [f32]]`),
+//! but if only read access is needed, we can also use an immutable slice of slices
+//! (`&[&[f32]]`).
+//!
 //!
 //! # Slice of slice-like structures
+//!
+//! A big disadvantage of the previous approach is that it doesn't work with signals
+//! stored in nested [`Vec`]s or [`array`]s.
+//! To allow this, we can extend it by using [`AsMut`]
+//! (or [`AsRef`] for immutable arguments) and turn it into a slice by calling
+//! the `.as_mut()` method (or `.as_ref()`, respectively).
 //!
 //! ```
 //! pub fn process(channels: &mut [impl AsMut<[f32]>]) {
@@ -36,6 +68,8 @@
 //!         channel[0] *= 5.0;
 //!     }
 //! }
+//!
+//! // The previous example still works, but now also this works:
 //!
 //! let mut data = [[0.1, 0.2, 0.3], [-0.1, -0.2, -0.3]];
 //! process(&mut data);
@@ -47,35 +81,56 @@
 //! ```
 //!
 //! This is a fine solution (with a reasonably simple implementation),
-//! but if we are willing to put in some more work, we can make our `process()` function
-//! even more flexible.
+//! but it still has (at least) two downsides:
+//!
+//! * To create the outer slice, often extra storage (and maybe even dynamic allocation) is needed,
+//!   see e.g. [`pointers::channel_ptrs_to_nested_slices()`].
+//! * It doesn't support iterators over channels, e.g. like the one created by
+//!   [`slice::chunks_mut()`].
+//!
 //!
 //! # Iterator over slice-like structures
 //!
+//! If we are willing to put in some more work, we can make our `process()` function
+//! even more flexible.
 //! But things will get worse before they get better again ...
 //!
 //! ```
 //! pub fn process(channels: impl IntoIterator<Item: AsMut<[f32]>>) {
+//!     // Use `channels` in for-loop or call `channels.into_iter()`:
 //!     for mut channel in channels {
+//!         // Call .as_mut() on each channel to get a "normal" writable slice:
 //!         let channel = channel.as_mut();
 //!         channel[0] *= 5.0;
 //!     }
 //! }
 //!
+//! // Now it works with iterators:
+//!
 //! let mut noninterleaved = [0.1, 0.2, 0.3, -0.1, -0.2, -0.3];
 //! process(noninterleaved.chunks_mut(3));
 //! assert_eq!(noninterleaved, [0.5, 0.2, 0.3, -0.5, -0.2, -0.3]);
 //!
-//! // however, this is problematic ...
+//! // And this becomes a bit simpler (one fewer `&mut`):
+//!
+//! let mut left = [0.1, 0.2, 0.3];
+//! let mut right = [-0.1, -0.2, -0.3];
+//! process([&mut left, &mut right]);
+//! assert_eq!(left, [0.5, 0.2, 0.3]);
+//! assert_eq!(right, [-0.5, -0.2, -0.3]);
+//!
+//! // However, this is problematic:
 //!
 //! let mut data = [[0.1, 0.2, 0.3], [-0.1, -0.2, -0.3]];
 //! process(data);
 //! assert_eq!(data, [[0.1, 0.2, 0.3], [-0.1, -0.2, -0.3]]); // NO CHANGE!
-//!
-//! // note that the data is unchanged ... since array is `Copy` ...
 //! ```
 //!
-//! ... we can avoid this by adding more stuff ...
+//! Note that `data` is unchanged, even though `process()` is supposed to change it!
+//! This happens because [`array` implements `Copy`](array#impl-Copy-for-%5BT;+N%5D),
+//! which means that the whole audio block is copied before it is passed to `process()`!
+//!
+//! We can avoid this by adding more stuff:
 //!
 //! ```
 //! pub fn process<'c, C>(channels: impl IntoIterator<Item = &'c mut C>)
@@ -88,22 +143,29 @@
 //!     }
 //! }
 //!
+//! // Now we are forced to pass a `&mut` (which is good!):
+//!
 //! let mut data = [[0.1, 0.2, 0.3], [-0.1, -0.2, -0.3]];
+//! //process(data); // compiler error: expected mutable reference `&mut _`
 //! process(&mut data);
 //! assert_eq!(data, [[0.5, 0.2, 0.3], [-0.5, -0.2, -0.3]]);
 //!
-//! // The `?Sized` part above is needed for this to work:
+//! // Iterators still work, but they need the `?Sized` part above:
+//!
 //! let mut noninterleaved = [0.1, 0.2, 0.3, -0.1, -0.2, -0.3];
 //! process(noninterleaved.chunks_mut(3));
 //! assert_eq!(noninterleaved, [0.5, 0.2, 0.3, -0.5, -0.2, -0.3]);
 //! ```
 //!
-//! ... this does what we want, but the function signature is getting quite cryptic ...
+//! This works for all the situations we have encountered so far,
+//! but the function signature is getting quite cryptic, isn't it?
+//!
 //!
 //! # Iterator over channels
 //!
-//! ... let's try to make the function signature less cryptic by introducing
-//! a trivial-looking trait and a cryptic blanket implementation ...
+//! Let's try to make the function signature less cryptic
+//! by introducing a trivial-looking trait and a cryptic
+//! [blanket implementation](https://doc.rust-lang.org/book/ch10-02-traits.html#using-trait-bounds-to-conditionally-implement-methods):
 //!
 //! ```
 //! trait ChannelMut<T>: AsMut<[T]> {}
@@ -130,7 +192,7 @@
 //!
 //! let mut left = [0.1, 0.2, 0.3];
 //! let mut right = [-0.1, -0.2, -0.3];
-//! process(&mut [&mut left, &mut right]);
+//! process([&mut left, &mut right]);
 //! assert_eq!(left, [0.5, 0.2, 0.3]);
 //! assert_eq!(right, [-0.5, -0.2, -0.3]);
 //!
@@ -163,7 +225,7 @@
 //!     }
 //! }
 //!
-//! // This allows the same usage scenarios as before, we're trying just a few here.
+//! // This allows the same usage scenarios as before, we're checking just a few here.
 //!
 //! let mut data = [[0.1, 0.2, 0.3], [-0.1, -0.2, -0.3]];
 //! process(&mut data);
@@ -181,8 +243,14 @@
 //! TODO: Clone, DoubleEndedIterator, other traits ... users can create their own custom
 //! `Channels` and `ChannelsMut` traits (together with appropriate blanket implementations).
 //! We're intentionally not providing those traits here.
+//!
+//! # Downsides of iterators
+//!
+//! Iterators are very flexible, but ...
+//! TODO: iterate only once, except when [`Clone`] (which isn't possible for writable slices)
+//! TODO: example: [`frames::frames_from_channels()`] (`Clone`)
+//! TODO: example: [`frames::frames_from_channels_mut()`] (not a real iterator)
 
-#![no_std]
 #![forbid(clippy::undocumented_unsafe_blocks)]
 
 pub mod flat;
@@ -206,8 +274,15 @@ const MAX_CHANNELS_FROM_SLICE: usize = 16;
 
 /// A non-mutable audio channel in contiguous memory.
 ///
+/// Nobody needs to implement this trait because it already has a
+/// [blanket implementation](Channel#impl-Channel%3CT%3E-for-%26U).
+///
 /// This can be used to define generic function arguments
 /// (using `impl IntoIterator<Item: Channel<T>>`) that accept multi-channel signals.
+///
+/// TODO: mutable: [`ChannelMut`]
+///
+/// TODO: mention ExactSizeIterator?
 ///
 /// # Examples
 ///
@@ -222,8 +297,6 @@ const MAX_CHANNELS_FROM_SLICE: usize = 16;
 ///         assert_eq!(channel[0], 0.5);
 ///     }
 /// }
-///
-/// // TODO: mention ExactSizeIterator?
 ///
 /// // This function can be used in many different ways:
 ///
@@ -240,51 +313,37 @@ const MAX_CHANNELS_FROM_SLICE: usize = 16;
 /// let noninterleaved = [0.5, 0.6, 0.7, 0.8, 0.5, 0.4, 0.3, 0.2];
 /// process(noninterleaved.chunks(4));
 /// ```
+///
+/// TODO: link to (mutable) examples?
+///
+/// For example usage, see e.g. [`flat::copy_to_interleaved()`] (featuring [`ExactSizeIterator`])
+/// and [`pointers::channel_ptrs_from_slices()`].
 pub trait Channel<T>: AsRef<[T]> {}
 
+/// This [blanket implementation](https://doc.rust-lang.org/book/ch10-02-traits.html#using-trait-bounds-to-conditionally-implement-methods)
+/// automatically implements the `Channel` trait for all (immutable) slice-like types.
 impl<T, U: AsRef<[T]> + ?Sized> Channel<T> for &U {}
 
 /// A mutable audio channel in contiguous memory.
 ///
+/// Nobody needs to implement this trait because it already has a
+/// [blanket implementation](ChannelMut#impl-ChannelMut%3CT%3E-for-%26mut+U).
+///
 /// This can be used to define generic function arguments
 /// (using `impl IntoIterator<Item: ChannelMut<T>>`) that accept multi-channel signals.
 ///
+/// TODO: immutable: [`Channel`]
+///
 /// # Examples
 ///
-/// ```
-/// use much::ChannelMut;
+/// TODO: link to examples
 ///
-/// fn process(channels: impl IntoIterator<Item: ChannelMut<f32>>) {
-///     // Use in for-loop or call .into_iter():
-///     for mut channel in channels {
-///         // Call .as_mut() on each channel to get a "normal" writable slice:
-///         let channel: &mut [f32] = channel.as_mut();
-///         channel[0] = 0.99;
-///     }
-/// }
-///
-/// // This function can be used in many different ways:
-///
-/// let mut a = [[0.5, 0.6, 0.7, 0.8], [0.5, 0.4, 0.3, 0.2]];
-/// process(&mut a);
-/// assert_eq!(a, [[0.99, 0.6, 0.7, 0.8], [0.99, 0.4, 0.3, 0.2]]);
-///
-/// let mut v = vec![vec![0.5, 0.6, 0.7, 0.8], vec![0.5, 0.4, 0.3, 0.2]];
-/// process(&mut v);
-/// assert_eq!(v, [[0.99, 0.6, 0.7, 0.8], [0.99, 0.4, 0.3, 0.2]]);
-///
-/// let mut left = [0.5, 0.6, 0.7, 0.8];
-/// let mut right = [0.5, 0.4, 0.3, 0.2];
-/// process([&mut left, &mut right]);
-/// assert_eq!(left, [0.99, 0.6, 0.7, 0.8]);
-/// assert_eq!(right, [0.99, 0.4, 0.3, 0.2]);
-///
-/// let mut noninterleaved = [0.5, 0.6, 0.7, 0.8, 0.5, 0.4, 0.3, 0.2];
-/// process(noninterleaved.chunks_mut(4));
-/// assert_eq!(noninterleaved, [0.99, 0.6, 0.7, 0.8, 0.99, 0.4, 0.3, 0.2]);
-/// ```
+/// For example usage, see e.g. [`flat::copy_from_interleaved()`] (featuring [`ExactSizeIterator`])
+/// and [`pointers::channel_ptrs_from_slices_mut()`].
 pub trait ChannelMut<T>: AsMut<[T]> {}
 
+/// This [blanket implementation](https://doc.rust-lang.org/book/ch10-02-traits.html#using-trait-bounds-to-conditionally-implement-methods)
+/// automatically implements the `ChannelMut` trait for all (mutable) slice-like types.
 impl<T, U: AsMut<[T]> + ?Sized> ChannelMut<T> for &mut U {}
 
 // TODO: multiple errors? rename?
