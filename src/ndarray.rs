@@ -1,4 +1,9 @@
-//! Dealing with two-dimensional arrays.
+//! Dealing with two-dimensional arrays (using the [`ndarray`] crate).
+//!
+//! When interoperating with Python code that uses NumPy arrays
+//! (but maybe also in other situations?) it might be useful to represent
+//! blocks of multi-channel audio as two-dimensional arrays
+//! (using the type [`ndarray::ArrayRef2`] in APIs).
 //!
 //! TODO: explain "rows" and "columns", "frames" and "channels"
 //! TODO: explain "interleaved" (means "interleaved channels";
