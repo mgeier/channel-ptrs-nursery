@@ -1,8 +1,29 @@
 //! Storing multiple channels in a single "flat" slice.
 //!
 //! There are two common ways to do this: *interleaved* and *non-interleaved*.
+//! When storing the channels *interleaved*, we first store the first sample of each channel,
+//! then the second sample of each channel, and so on.
+//! When storing them *non-interleaved*, we first store all samples of the first channel,
+//! then all samples of the second channel, and so on.
 //!
-//! TODO: explain both
+//! To illustrate this, let's say we have an audio block with 3 channels (`A`, `B` and `C`)
+//! and a block length of 5 (i.e. each channel has 5 samples).
+//! This is what it would look like with *interleaved* storage:
+//!
+//! ```text
+//! [A0, B0, C0, A1, B1, C1, A2, B2, C2, A3, B3, C3, A4, B4, C4]
+//! ```
+//!
+//! This is what it would look like with *non-interleaved* storage:
+//!
+//! ```text
+//! [A0, A1, A2, A3, A4, B0, B1, B2, B3, B4, C0, C1, C2, C3, C4]
+//! ```
+//!
+//! TODO: contiguous frames vs. contiguous channels, chunks() and chunks_mut(),
+//! [`much::frames`](crate::frames)
+//!
+//! TODO: link to [`much::ndarray`](crate::ndarray), relation to column vs. row major
 
 use core::mem::MaybeUninit;
 

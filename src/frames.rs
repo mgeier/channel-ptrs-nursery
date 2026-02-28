@@ -3,10 +3,18 @@
 use core::marker::PhantomData;
 
 /// Returns an iterator over frames (which themselves are iterators over samples).
-// TODO: docs: this does not copy any samples and instead yields `&T`
-// TODO: docs: depending on the circumstances, it might be more efficient to copy all samples to interleaved first and then use `chunks()` to iterate over frames
-// see [`copy_to_interleaved()`]
-// TODO: docs: [`Channel`] cannot be used because it cannot express necessary lifetimes?
+///
+/// This does not copy any samples and instead yields `&T`.
+/// Depending on the circumstances,
+/// it might be more efficient to copy all samples to interleaved first
+/// and then use [`slice::chunks()`] to iterate over frames,
+/// see [`much::flat::copy_to_interleaved()`](crate::flat::copy_to_interleaved).
+///
+/// Note that [`much::Channel`](crate::Channel) cannot be used here
+/// because we need to explicitly specify lifetimes.
+///
+/// To iterate over the frames of a mutable audio block,
+/// [`frames_from_channels_mut()`] can be used.
 #[must_use]
 pub fn frames_from_channels<'a, T, I, C>(channels: I) -> FramesFromChannels<'a, T, I, C>
 where
@@ -21,6 +29,10 @@ where
     }
 }
 
+/// An iterator over frames (which are themselves iterators).
+///
+/// This is returned by [`frames_from_channels()`].
+/// It can be used to iterate over frames via [`FrameFromChannels`].
 pub struct FramesFromChannels<'a, T, I, C>
 where
     I: IntoIterator<Item = &'a C> + Clone,
@@ -57,6 +69,9 @@ where
     }
 }
 
+/// An iterator over the (non-contiguous) samples in a single frame.
+///
+/// This is returned by [`FramesFromChannels::next()`].
 pub struct FrameFromChannels<'a, T, I, C>
 where
     I: Iterator<Item = &'a C>,
@@ -85,10 +100,17 @@ where
 ///
 /// TODO: not compatible with [`Iterator`],
 /// `LendingIterator` doesn't exist yet in the standard library
+/// TODO: move this to the docs of [`FramesFromChannelsMut`]?
 ///
 /// `channels` is *not* an [`IntoIterator`], because the channels are iterated multiple times
 /// (once for each frame), which would require [`Copy`], which is not available for mutable
 /// slices/containers.
+///
+/// Note that [`much::ChannelMut`](crate::ChannelMut) cannot be used here
+/// because we need to explicitly specify lifetimes.
+///
+/// To iterate over the frames of an immutable audio block,
+/// [`frames_from_channels()`] can be used.
 #[must_use]
 pub fn frames_from_channels_mut<'a, T, C>(channels: &'a mut [C]) -> FramesFromChannelsMut<'a, T, C>
 where
@@ -102,6 +124,9 @@ where
     }
 }
 
+/// A pseudo-iterator over frames (which are themselves proper iterators).
+///
+/// This is returned by [`frames_from_channels_mut()`].
 pub struct FramesFromChannelsMut<'a, T, C> {
     index: usize,
     frames: Option<usize>,

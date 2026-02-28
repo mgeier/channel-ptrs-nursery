@@ -97,7 +97,7 @@
 //!
 //! ```
 //! pub fn process(channels: impl IntoIterator<Item: AsMut<[f32]>>) {
-//!     // Use `channels` in for-loop or call `channels.into_iter()`:
+//!     // Use in for-loop or call .into_iter():
 //!     for mut channel in channels {
 //!         // Call .as_mut() on each channel to get a "normal" writable slice:
 //!         let channel = channel.as_mut();
@@ -159,6 +159,10 @@
 //!
 //! This works for all the situations we have encountered so far,
 //! but the function signature is getting quite cryptic, isn't it?
+//!
+//! The following section shows how to avoid the intimidating explicit lifetime annotations
+//! and `where` clauses, but in some special cases we will not be able to avoid them, see e.g.
+//! [`frames::frames_from_channels()`] and [`frames::frames_from_channels_mut()`].
 //!
 //!
 //! # Iterator over channels
@@ -248,8 +252,11 @@
 //!
 //! Iterators are very flexible, but ...
 //! TODO: iterate only once, except when [`Clone`] (which isn't possible for writable slices)
+//!
 //! TODO: example: [`frames::frames_from_channels()`] (`Clone`)
-//! TODO: example: [`frames::frames_from_channels_mut()`] (not a real iterator)
+//!
+//! TODO: example: [`frames::frames_from_channels_mut()`] (slice of slices instead of iterator of
+//! slices)
 
 #![forbid(clippy::undocumented_unsafe_blocks)]
 
