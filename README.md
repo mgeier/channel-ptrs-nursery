@@ -1,3 +1,5 @@
+**This has been moved to <https://github.com/mgeier/much>!**
+
 Handling Multi-Channel Audio Signals in Rust
 ============================================
 
