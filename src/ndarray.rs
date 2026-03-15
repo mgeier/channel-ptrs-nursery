@@ -14,7 +14,36 @@
 //! TODO: rows/columns being contiguous doesn't require the whole array to be contiguous.
 //!
 //! These functions don't copy the array elements. In fact, that's the whole point!
+//!
 //! TODO: explain how to do that, e.g. convert interleaved to non-interleaved
+//!
+//! # Checking for contiguous or interleaved channels
+//!
+//! Assuming our channels are stored in columns,
+//! we can differentiate between contiguous and interleaved channels
+//! like this:
+//!
+//! ```
+//! use much::ndarray::{contiguous_columns_mut, interleaved_columns_mut};
+//! use ndarray::ArrayRef2;
+//!
+//! fn process_columns_inplace(a: &mut ArrayRef2<f32>) {
+//!     if let Some(columns) = contiguous_columns_mut(a) {
+//!         for column in columns {
+//!             // Process contiguous column.
+//!         }
+//!     } else if let Some(slice) = interleaved_columns_mut(a) {
+//!         // Process interleaved colums.
+//!     } else {
+//!         // Error: neither contiguous nor interleaved columns.
+//!     }
+//!
+//!     // TODO: explain behavior when one-channel signal is given, interleaved or not?
+//! }
+//! ```
+//!
+//! If our channels are stored in rows,
+//! we can use the `*_rows()` and `*_rows_mut()` functions instead.
 
 // Public re-export.
 pub use ndarray;

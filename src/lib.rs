@@ -17,7 +17,6 @@
 //! ... when interfacing via FFI, often pointers to pointers are used,
 //! see [`pointers`] module
 //!
-//! TODO: move this to separate module?
 //!
 //! # Slice of slices
 //!
@@ -251,6 +250,7 @@
 //! # Downsides of iterators
 //!
 //! Iterators are very flexible, but ...
+//!
 //! TODO: iterate only once, except when [`Clone`] (which isn't possible for writable slices)
 //!
 //! TODO: example: [`frames::frames_from_channels()`] (`Clone`)
@@ -266,18 +266,7 @@ pub mod frames;
 pub mod ndarray;
 pub mod pointers;
 
-/*
-#[cfg(doc)]
-pub mod tutorial;
-*/
-
-// TODO: iter to slice? mention in ndarray module docs
-
-// TODO: move this to example code:
-/*
-// This can be chosen arbitrarily as trade-off between stack usage and convenience.
-const MAX_CHANNELS_FROM_SLICE: usize = 16;
-*/
+// TODO: iter to slice?
 
 /// A non-mutable audio channel in contiguous memory.
 ///
@@ -321,8 +310,6 @@ const MAX_CHANNELS_FROM_SLICE: usize = 16;
 /// process(noninterleaved.chunks(4));
 /// ```
 ///
-/// TODO: link to (mutable) examples?
-///
 /// For example usage, see e.g. [`flat::copy_to_interleaved()`] (featuring [`ExactSizeIterator`])
 /// and [`pointers::channel_ptrs_from_slices()`].
 pub trait Channel<T>: AsRef<[T]> {}
@@ -343,24 +330,22 @@ impl<T, U: AsRef<[T]> + ?Sized> Channel<T> for &U {}
 ///
 /// # Examples
 ///
-/// TODO: link to examples
-///
 /// For example usage, see e.g. [`flat::copy_from_interleaved()`] (featuring [`ExactSizeIterator`])
 /// and [`pointers::channel_ptrs_from_slices_mut()`].
+///
+/// See [crate-level documentation](crate#iterator-over-channels) for more examples.
 pub trait ChannelMut<T>: AsMut<[T]> {}
 
 /// This [blanket implementation](https://doc.rust-lang.org/book/ch10-02-traits.html#using-trait-bounds-to-conditionally-implement-methods)
 /// automatically implements the `ChannelMut` trait for all (mutable) slice-like types.
 impl<T, U: AsMut<[T]> + ?Sized> ChannelMut<T> for &mut U {}
 
-// TODO: multiple errors? rename?
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Error {
     // all channels must have the same length
     Jagged,
-    // TODO: not all functions need this
     LengthMismatch,
-    // TODO: not all functions need this
     // too few pointers in `storage`
     StorageOverflow,
 }

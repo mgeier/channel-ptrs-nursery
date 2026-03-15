@@ -1,12 +1,11 @@
 Handling Multi-Channel Audio Signals in Rust
 ============================================
 
-There is still *much* to do!
-
 > Don't define containers,  
 > define interfaces.
 
 —Irish proverb
+
 
 Nomenclature
 ------------
@@ -18,13 +17,6 @@ The term "planar" seems to originate from
 (which also seems to use the term "packed").
 It is also used in
 [Web Audio](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Basic_concepts_behind_Web_Audio_API).
-
-Open Questions
---------------
-
-* do we need SIMD support?
-  * see e.g. [audio_buffer_interface](https://git.sr.ht/~signal_processor/audio_buffer/tree/master/item/src/lib.rs)
-  * [fundsp](https://crates.io/crates/fundsp) uses [wide](https://crates.io/crates/wide)
 
 
 Potential Alternatives
